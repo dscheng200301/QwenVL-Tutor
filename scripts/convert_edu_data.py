@@ -319,8 +319,8 @@ def convert_ceval(output_path, max_samples=None):
                 if explanation:
                     answer_text = f"解析：{explanation}\n\n{answer_text}"
                 conversations = [
-                    {"role": "system", "content": EDU_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"<image>\n{question}"},
+                    {"role": "system", "content": "你是一位耐心的辅导老师，请仔细阅读题目，理解题意后给出正确的解答。请包含：1. 题目分析 2. 解题步骤 3. 最终答案"},
+                    {"role": "user", "content": question},
                     {"role": "assistant", "content": answer_text},
                 ]
                 placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
@@ -360,8 +360,8 @@ def convert_cmmlu(output_path, max_samples=None):
             answer = item.get('answer', '')
             answer_text = f"答案：{answer}"
             conversations = [
-                {"role": "system", "content": EDU_SYSTEM_PROMPT},
-                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "system", "content": "你是一位耐心的辅导老师，请仔细阅读题目，理解题意后给出正确的解答。请包含：1. 题目分析 2. 解题步骤 3. 最终答案"},
+                {"role": "user", "content": question},
                 {"role": "assistant", "content": answer_text},
             ]
             placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
