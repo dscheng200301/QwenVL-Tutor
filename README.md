@@ -78,6 +78,27 @@
 
 **👉 核心原则：训练完每个阶段后，立即运行 `--eval_all` 全量评估，对比前后分数变化，确保新阶段没有破坏已有能力。**
 
+### 评估反馈优化（🆕）
+
+训练后的评估结果会自动持久化，支持对比分析和数据重采样：
+
+```bash
+# ① 评估自动保存到 eval_results/<stage>_<timestamp>.json
+python eval_edu.py --model_path out/edu_sft --stage sft --eval_all --max_samples 200
+
+# ② 对比最新两次评估，查看能力变化
+python compare_evals.py
+
+# ③ 基于评估结果生成数据重采样建议（弱项多练）
+python scripts/resample_data.py
+```
+
+| 工具 | 脚本 | 功能 |
+|------|------|------|
+| **结果对比** | `compare_evals.py` | 对比两次评估的指标变化（✅上升/⚠️下降），自动定位退化 |
+| **数据重采样** | `scripts/resample_data.py` | 分析各数据集得分，得分低的数据集自动提高训练权重 |
+| **结果持久化** | `eval_edu.py`（已集成）| 所有阶段评估结果自动保存到 `eval_results/`，附带时间戳 |
+
 ### 12 个评估数据集
 
 | 评估数据集 | 评估命令 | 条数 | 评估指标 |
@@ -120,7 +141,8 @@ qwensearch/
 ├── scripts/                       # 工具脚本
 │   ├── convert_edu_data.py       # 数据集格式转换（支持26种格式）
 │   ├── web_demo.py               # Gradio Web 演示
-│   └── create_eval_sets.py       # 创建评估 holdout 集
+│   ├── create_eval_sets.py       # 创建评估 holdout 集
+│   └── resample_data.py          # 评估反馈数据重采样 🆕
 ├── trainer/                       # 训练层
 │   ├── __init__.py
 │   ├── train_sft.py              # SFT 微调训练（默认12个数据集）
@@ -129,6 +151,7 @@ qwensearch/
 │   ├── reward_model.py           # EduRewardModel（五维度教育奖励）
 │   └── trainer_utils.py          # 训练工具函数
 ├── eval_edu.py                    # 多数据集评估脚本（支持 --eval_all）
+├── compare_evals.py               # 评估结果对比工具 🆕
 ├── download_data.py               # 一键下载 21 个数据集
 ├── DATA.md                        # 数据集全览
 ├── requirements.txt
