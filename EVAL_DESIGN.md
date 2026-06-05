@@ -244,31 +244,41 @@ results = backend.generate_with_score(prompts, images, max_tokens=512)
 
 ## 七、典型工作流
 
-### 7.1 一站式（推荐）
+### 7.1 一站式 + 🆕 自动加速（强烈推荐）
 
 ```bash
-# 训练
-python trainer/train_sft.py --epochs 3 --save_weight edu_sft
-python trainer/train_grpo.py --from_weight ../out/edu_sft --epochs 1
+# 训练（自动检测 4 卡 → DeepSpeed ZeRO-2 + 启用 vLLM）
+python scripts/optimize/edu_optimize.py auto --epochs 2 --save_weight edu_sft_v2
+# 输出:
+#   自动加速决策
+#     检测到 4 张 GPU（最小显存 40.0 GB）
+#     -> 分布式训练模式: deepspeed (ZeRO-2)
+#     -> vLLM 推理: 已启用（TP=2）
 
-# 评估（一个命令 = run + meta + report）
-python scripts/eval/edu_evaluate.py all --stage full --model_path out/edu_grpo --eval_all
+# 评估（自动 vLLM 加速 5-20x）
+python scripts/eval/edu_evaluate.py all --stage sft --model_path out/edu_sft --eval_all
+# 输出:
+#   vLLM 推理决策
+#     检测到 4 张 GPU
+#     vLLM 安装: 是
+#     -> vLLM 推理: 已启用（TP=2）
 
-# 优化（一个命令 = resample + retrain）
-python scripts/optimize/edu_optimize.py auto --epochs 2
+# 手动覆盖
+python scripts/optimize/edu_optimize.py retrain --epochs 2 --no_distributed
+python scripts/eval/edu_evaluate.py run --stage sft --model_path out/edu_sft --no_vllm
 ```
 
 ### 7.2 单独工具（按需）
 
 ```bash
-# 评估
+# 评估子命令
 python scripts/eval/edu_evaluate.py run     --stage sft --model_path out/edu_sft --eval_all
 python scripts/eval/edu_evaluate.py compare --show_weak
 python scripts/eval/edu_evaluate.py errors  --output_errors errors.json
 python scripts/eval/edu_evaluate.py meta    --check_consistency
 python scripts/eval/edu_evaluate.py report  --output report.md
 
-# 优化
+# 优化子命令
 python scripts/optimize/edu_optimize.py resample --output weights.json
 python scripts/optimize/edu_optimize.py build    --output edu_grpo.parquet
 python scripts/optimize/edu_optimize.py retrain  --data_paths "..." --epochs 2
