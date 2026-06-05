@@ -22,7 +22,6 @@ checkpoints/
 !model/tokenizer_config.json
 
 # Datasets
-dataset/*.parquet
 !dataset/.gitkeep
 
 # IDE
