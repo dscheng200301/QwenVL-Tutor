@@ -18,6 +18,16 @@
 | 12 | **Gaokao MathCloze** | `edu_gaokao_mathcloze.parquet` | 118 | CN | 纯文本 | 高考数学 | `hails/agieval-gaokao-mathcloze` |
 | | **合计** | | **106,198** | | | | |
 
+## 当前含图 vs 纯文本分布
+
+| 类型 | 数据集数 | 总条数 | 占比 |
+|------|:---:|------:|:----:|
+| **含图** (图文多模态) | 5 | 41,158 | 38.8% |
+| **纯文本** (仅文本) | 7 | 65,040 | 61.2% |
+| 合计 | 12 | 106,198 | — |
+
+> ⚠️ 纯文本占比过高（61%），VLM 的多模态视觉能力训练不足。优先补充图文数据集。
+
 ## 磁盘占用
 
 | 文件 | 大小 | 条数 |
@@ -131,6 +141,10 @@ python eval_edu.py --model_path out/edu_sft --eval_all --max_samples 200
 # 传统分阶段评估（兼容原有流程）
 python eval_edu.py --stage sft   # ScienceQA + C-Eval + 自定义
 python eval_edu.py --stage full  # 全量最终评估
+
+# 评估反馈：对比 + 重采样
+python compare_evals.py                    # 对比最新两次评估
+python scripts/resample_data.py            # 基于评估结果生成数据重采样建议
 ```
 
 ### 评估指标说明
@@ -143,12 +157,40 @@ python eval_edu.py --stage full  # 全量最终评估
 | **步骤完整率** | 回复中是否包含分步推理关键词 | 所有图文数学数据集 |
 | **启发式引导率** | 回复中是否包含引导性语言 | 亲子教育场景评估 |
 
-## 待补充的数据方向
+## 待补充的图文数据集
 
-| 缺口 | 优先级 | 补充方案 |
-|------|--------|----------|
-| 中文图文几何题 | 🔴 高 | GeoQA+ 已定位 `leonardPKU/GEOQA_R1V_Train_8K` |
-| 大学级多模态题 | 🔴 高 | MMMU 已修复 30 学科 config 遍历 |
-| 几何图文解析 | 🟡 中 | Geometry3K 已定位 `hiyouga/geometry3k` |
-| 信息图问答 | 🟡 中 | DVQA 已定位 `DavidNguyen/DVQA` |
-| 中文教材截图 | 🟡 中 | 爬取初高中教材PDF → 截图 → 标注 |
+> 🎯 **目标：** 将含图数据占比从 38.8% 提升至 60%+，强化 VLM 多模态视觉推理能力。
+
+| # | 数据集 | 条数 | 语言 | 学科 | HF 来源 | 优先级 | 备注 |
+|---|--------|:---:|:----:|------|----------|:------:|------|
+| 1 | **MMMU** | ~900 | CN/EN | 30 大学科多模态 | `MMMU/MMMU` | 🔴 高 | 大学级图文题，含医学/工程/艺术等，已适配 30 学科遍历 |
+| 2 | **GeoQA+** | 6,800 | CN | 中文几何题 | `leonardPKU/GEOQA_R1V_Train_8K` | 🔴 高 | 平面几何图文推理，含图+推理链 |
+| 3 | **Geometry3K** | 3,000 | EN | 几何题 | `hiyouga/geometry3k` | 🟡 中 | 英文几何图文题，角度/面积/相似等 |
+| 4 | **DVQA** | 3,000 | EN | 信息图问答 | `DavidNguyen/DVQA` | 🟡 中 | 柱状图/折线图/饼图理解问答 |
+| 5 | **TabMWP** | 12,000 | EN | 表格数学 | `TabMWP/tabmwp` | 🟡 中 | 含图表格数学应用题，图文结合推理 |
+| 6 | **AI2D** | 5,000 | EN | 科学图解 | `HuggingFaceM4/ai2d` | 🟡 中 | 初高中科学图解题（生物/物理/化学） |
+| 7 | **CLEVR-Math** | 10,000 | EN | 视觉计数 | `OleehyO/CLEVR-Math` | 🟢 低 | 3D 渲染物品计数/加减法 |
+| 8 | **VizWiz** | 20,000 | EN | 盲人视觉问答 | `MMInstruction/VizWiz` | 🟢 低 | 自然场景视觉问答（可降权使用） |
+
+**预计补充后：**
+
+| 阶段 | 数据集 | 新增条数 | 含图总条数 | 含图占比 |
+|------|--------|:---:|------:|:----:|
+| 当前 | 5 个含图数据集 | — | 41,158 | 38.8% |
+| Phase 1 🔴 | MMMU + GeoQA+ | 7,700 | 48,858 | 43% |
+| Phase 2 🟡 | Geometry3K + DVQA + TabMWP + AI2D | 23,000 | 71,858 | 55% |
+| Phase 3 🟢 | CLEVR-Math + VizWiz | 30,000 | 101,858 | 64% |
+| **目标** | **全部 13 个含图集** | **~60,700** | **101,858** | **~64%** ✅ |
+
+### 补充命令
+
+```bash
+# 下载指定图文数据集（运行 convert_edu_data.py）
+python scripts/convert_edu_data.py --dataset mmmu
+python scripts/convert_edu_data.py --dataset geoqa
+python scripts/convert_edu_data.py --dataset geometry3k
+python scripts/convert_edu_data.py --dataset dvqa
+python scripts/convert_edu_data.py --dataset tabmwp
+python scripts/convert_edu_data.py --dataset ai2d
+python scripts/convert_edu_data.py --dataset clevr_math
+python scripts/convert_edu_data.py --dataset vizwiz
