@@ -53,10 +53,13 @@ def generate_responses(
             top_k=50,
             do_sample=True,
         )
-        # 提取新生成的 token
         prompt_len = prompt_ids.shape[1]
         new_tokens = gen_ids[0, prompt_len:]
         response_text = processor.tokenizer.decode(new_tokens, skip_special_tokens=True)
+
+        del gen_ids
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         if len(response_text.strip()) > 0:
             responses.append(response_text)
@@ -116,45 +119,41 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
             advantages = edu_grpo_advantage(rewards)
             all_rewards.extend(rewards.tolist())
 
-            # 3. 计算旧策略 log probs
-            old_log_probs_list = []
+            # 3. 批量 tokenize（避免重复计算）
+            resp_ids_list = []
             for resp_text in response_texts:
-                full_ids = torch.cat([
-                    single_prompt[0],
-                    model.processor.tokenizer(
-                        resp_text, add_special_tokens=False, return_tensors="pt"
-                    ).input_ids[0].to(args.device)
-                ])
+                resp_ids = model.processor.tokenizer(
+                    resp_text, add_special_tokens=False, return_tensors="pt"
+                ).input_ids[0]
+                full_ids = torch.cat([single_prompt[0], resp_ids])
                 if len(full_ids) > args.max_seq_len:
                     full_ids = full_ids[:args.max_seq_len]
-                full_ids = full_ids.unsqueeze(0)
-                labels = full_ids.clone()
-                labels[0, :single_prompt.shape[1]] = -100
+                resp_ids_list.append(full_ids)
 
-                with torch.no_grad():
+            if len(resp_ids_list) == 0:
+                continue
+
+            # 4. 批量计算旧策略 log probs
+            old_log_probs_list = []
+            with torch.no_grad():
+                for full_ids in resp_ids_list:
+                    full_ids = full_ids.unsqueeze(0)
+                    labels = full_ids.clone()
+                    labels[0, :single_prompt.shape[1]] = -100
                     log_probs, seq_len, _ = model.get_log_probs(
                         full_ids, labels, single_pv, single_thw
                     )
-                old_log_probs_list.append(log_probs.squeeze(0) / seq_len.clamp(min=1))
+                    old_log_probs_list.append(log_probs.squeeze(0) / seq_len.clamp(min=1))
 
             if len(old_log_probs_list) == 0:
                 continue
 
-            # 4. 新策略下重新计算 log probs
+            # 5. 批量计算新策略 log probs
             new_log_probs_list = []
-            for resp_text in response_texts:
-                full_ids = torch.cat([
-                    single_prompt[0],
-                    model.processor.tokenizer(
-                        resp_text, add_special_tokens=False, return_tensors="pt"
-                    ).input_ids[0].to(args.device)
-                ])
-                if len(full_ids) > args.max_seq_len:
-                    full_ids = full_ids[:args.max_seq_len]
+            for full_ids in resp_ids_list:
                 full_ids = full_ids.unsqueeze(0)
                 labels = full_ids.clone()
                 labels[0, :single_prompt.shape[1]] = -100
-
                 log_probs, seq_len, _ = model.get_log_probs(
                     full_ids, labels, single_pv, single_thw
                 )
@@ -166,7 +165,7 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
             old = torch.stack(old_log_probs_list)
             new = torch.stack(new_log_probs_list)
 
-            # 5. GRPO policy loss
+            # 6. GRPO policy loss
             group_loss = edu_grpo_policy_loss(old, new, advantages[:len(old)], args.clip_eps)
             total_loss += group_loss
 

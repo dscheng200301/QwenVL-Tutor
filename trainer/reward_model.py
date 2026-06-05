@@ -5,6 +5,7 @@
 import re
 import math
 import torch
+from collections import Counter
 
 
 class EduRewardModel:
@@ -12,7 +13,7 @@ class EduRewardModel:
     教育 VLM 奖励函数
 
     评分维度（总分 0~1）：
-    1. 答案准确性（0.30）：与标准答案的匹配度
+    1. 答案准确性（0.30）：与标准答案的匹配度（关键词 + 语义相似度）
     2. 步骤完整性（0.25）：是否包含解题步骤
     3. 语言流畅度（0.15）：中文表达流畅度
     4. 启发式引导（0.20）：是否使用引导而非直接给答案
@@ -35,10 +36,32 @@ class EduRewardModel:
         r"^选\s*[A-D]",
     ]
 
+    # 数值类关键词（同义词映射）
+    NUMBER_KEYWORDS = {
+        "一": "1", "二": "2", "三": "3", "四": "4", "五": "5",
+        "六": "6", "七": "7", "八": "8", "九": "9", "十": "10",
+        "两": "2", "几个": "若干", "多少": "未知数",
+        "加倍": "×2", "翻倍": "×2", "减半": "÷2",
+    }
+
     def __init__(self, tokenizer=None, ideal_length=150, max_length=512):
         self.tokenizer = tokenizer
         self.ideal_length = ideal_length
         self.max_length = max_length
+
+    def _normalize_text(self, text: str):
+        """文本规范化：统一数字、标点、空白"""
+        # 统一数字表示
+        for cn_num, ar_num in self.NUMBER_KEYWORDS.items():
+            text = text.replace(cn_num, ar_num)
+        
+        # 去除多余空白
+        text = re.sub(r'\s+', ' ', text)
+        
+        # 去除标点符号（保留中文和英文）
+        text = re.sub(r'[^\w\s\u4e00-\u9fff]', ' ', text)
+        
+        return text.strip()
 
     def _extract_keywords(self, text: str):
         """从文本中提取中文关键词"""
@@ -46,16 +69,141 @@ class EduRewardModel:
         english_words = re.findall(r'[a-zA-Z]{2,}', text.lower())
         return set(chinese_words + english_words)
 
+    def _tfidf_similarity(self, text1: str, text2: str):
+        """
+        TF-IDF 余弦相似度计算
+        
+        这是一种轻量级的语义相似度方法，
+        不需要额外的模型或 API 调用
+        """
+        # 分词
+        words1 = self._tokenize(text1)
+        words2 = self._tokenize(text2)
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        # 构建词频向量
+        all_words = list(set(words1) | set(words2))
+        if not all_words:
+            return 0.0
+        
+        # 计算 TF
+        tf1 = Counter(words1)
+        tf2 = Counter(words2)
+        
+        # 计算 IDF（简化版本）
+        idf = {}
+        for word in all_words:
+            df = (1 if word in tf1 else 0) + (1 if word in tf2 else 0)
+            idf[word] = math.log(2.0 / (df + 1)) + 1
+        
+        # 构建 TF-IDF 向量
+        vec1 = [tf1.get(w, 0) * idf[w] for w in all_words]
+        vec2 = [tf2.get(w, 0) * idf[w] for w in all_words]
+        
+        # 计算余弦相似度
+        dot_product = sum(v1 * v2 for v1, v2 in zip(vec1, vec2))
+        norm1 = math.sqrt(sum(v ** 2 for v in vec1))
+        norm2 = math.sqrt(sum(v ** 2 for v in vec2))
+        
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        
+        return dot_product / (norm1 * norm2)
+
+    def _tokenize(self, text: str):
+        """简单分词：中文按字符，英文按单词"""
+        # 提取中文字符序列
+        chinese_chars = re.findall(r'[\u4e00-\u9fff]+', text)
+        # 提取英文单词
+        english_words = re.findall(r'[a-zA-Z]+', text.lower())
+        # 提取数字
+        numbers = re.findall(r'\d+\.?\d*', text)
+        
+        # 组合
+        tokens = []
+        for chars in chinese_chars:
+            tokens.extend(list(chars))  # 中文字符逐个分词
+        tokens.extend(english_words)
+        tokens.extend(numbers)
+        
+        return tokens
+
     def _accuracy_score(self, response_text: str, gt_text: str):
-        """答案准确性评分：基于关键词重叠率"""
+        """
+        答案准确性评分：结合关键词重叠率和语义相似度
+        
+        综合评分 = 0.5 * 关键词重叠率 + 0.5 * TF-IDF 相似度
+        """
         if not gt_text:
             return 0.5
+        
+        # 规范化文本
+        gt_normalized = self._normalize_text(gt_text)
+        resp_normalized = self._normalize_text(response_text)
+        
+        # 1. 关键词重叠率（原有逻辑）
         gt_kw = self._extract_keywords(gt_text)
         resp_kw = self._extract_keywords(response_text)
+        
         if len(gt_kw) == 0:
+            keyword_score = 0.5
+        else:
+            overlap = len(gt_kw & resp_kw)
+            keyword_score = min(overlap / max(len(gt_kw), 1), 1.0)
+        
+        # 2. TF-IDF 语义相似度（新增）
+        semantic_score = self._tfidf_similarity(gt_normalized, resp_normalized)
+        
+        # 3. 数值答案精确匹配（针对数学题）
+        number_score = self._number_match_score(response_text, gt_text)
+        
+        # 综合评分
+        combined_score = 0.4 * keyword_score + 0.4 * semantic_score + 0.2 * number_score
+        
+        return min(combined_score, 1.0)
+
+    def _number_match_score(self, response_text: str, gt_text: str):
+        """
+        数值答案匹配评分
+        
+        对于数学题，数值答案的精确匹配很重要
+        """
+        # 提取数字
+        resp_numbers = set(re.findall(r'\d+\.?\d*', response_text))
+        gt_numbers = set(re.findall(r'\d+\.?\d*', gt_text))
+        
+        if not gt_numbers:
             return 0.5
-        overlap = len(gt_kw & resp_kw)
-        return min(overlap / max(len(gt_kw), 1), 1.0)
+        
+        # 完全匹配
+        if resp_numbers == gt_numbers:
+            return 1.0
+        
+        # 部分匹配
+        overlap = len(resp_numbers & gt_numbers)
+        union = len(resp_numbers | gt_numbers)
+        
+        if union == 0:
+            return 0.5
+        
+        jaccard = overlap / union
+        
+        # 如果有交集但不完全匹配，检查数值大小是否接近
+        if overlap > 0:
+            # 检查是否有非常接近的数值（允许 5% 误差）
+            for resp_num in resp_numbers:
+                for gt_num in gt_numbers:
+                    try:
+                        r = float(resp_num)
+                        g = float(gt_num)
+                        if g != 0 and abs(r - g) / g < 0.05:
+                            return 0.7  # 接近但不完全匹配
+                    except ValueError:
+                        continue
+        
+        return jaccard
 
     def _completeness_score(self, response_text: str):
         """步骤完整性评分：检查是否包含分步说明"""

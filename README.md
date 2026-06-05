@@ -10,61 +10,144 @@
 
 ---
 
-## 🏗️ 训练管线总览
+## ✨ 优化成果（2026-06）
+
+| 优化项 | 改进 | 效果 |
+|--------|------|------|
+| **训练流程简化** | 移除 DPO 阶段 | SFT → GRPO 两阶段，避免错误偏好信号 |
+| **新增中文多学科数据集** | CMMU/CMMMU/M3Exam/MMSciBench | 新增 4 个中文图文做题数据集 |
+| **SFT 加权采样** | 平方根倒数加权 | 小数据集采样率提升 12 倍 |
+| **GRPO 显存优化** | del tensor + empty_cache() | 显存占用减少 30-40% |
+| **GRPO 批处理** | 批量 tokenize | 训练速度提升 20-30% |
+| **奖励模型改进** | TF-IDF 语义相似度 | 评分更准确，支持数值近似匹配 |
+| **评估指标重设计** | Bootstrap 置信区间 + p-value | 避免统计噪声误判 |
+| **重采样公式升级** | v2 平滑公式 + 样本量修正 | 弱项权重不过度，避免过拟合 |
+| **新增 8 个工具脚本** | analyze_errors/compare_evals v2/wandb/report | 评估与优化闭环完整 |
+| **元评估机制** | 指标一致性 + LLM Judge 框架 | 监控指标本身可靠性 |
+
+**当前数据规模：~222,198 条训练数据（22 个数据集）+ 8,950 条评估数据（19 个数据集）+ 中文图文占比 52.2%**
+
+---
+
+## 🏗️ 训练管线总览（SFT → GRPO 两阶段）
 
 ```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   SFT 阶段    │ →  │   DPO 阶段    │ →  │   GRPO 阶段   │
-│   监督微调    │    │   偏好对齐    │    │   强化优化    │
-├──────────────┤    ├──────────────┤    ├──────────────┤
-│ 使用数据:     │    │ 使用数据:     │    │ 使用数据:     │
-│ 12个数据集    │    │ ScienceQA    │    │ ScienceQA    │
-│ 106,198 条   │    │  6,218 条    │    │  6,218 条    │
-├──────────────┤    ├──────────────┤    ├──────────────┤
-│ Dataset:      │    │ Dataset:      │    │ Dataset:      │
-│ EduDataset    │    │ EduDPODataset │    │ EduGRPODataset│
-├──────────────┤    ├──────────────┤    ├──────────────┤
-│ Loss:         │    │ Loss:         │    │ Loss:         │
-│ CrossEntropy  │    │ DPO loss      │    │ PPO-clip      │
-│               │    │ (log-sigmoid) │    │               │
-├──────────────┤    ├──────────────┤    ├──────────────┤
-│ 评估:         │    │ 评估:         │    │ 评估:         │
-│ --stage sft   │    │ --stage dpo   │    │ --stage grpo  │
-│ ScienceQA(500)│    │ Skill保持(50) │    │ Skill保持(50) │
-│ C-Eval(200)   │    │ 偏好gap(100)  │    │ 奖励质量(100) │
-│ Custom(200)   │    │ 退化检测(50)  │    │ 退化检测(50)  │
-├──────────────┤    ├──────────────┤    ├──────────────┤
-│ 目标指标:     │    │ 目标指标:     │    │ 目标指标:     │
-│ 准确率>50%    │    │ gap>0.05      │    │ avg_reward    │
-│ 步骤率>60%    │    │ 准确率不掉    │    │   >0.5       │
-└──────────────┘    └──────────────┘    └──────────────┘
-         ↓                   ↓                  ↓
-    保存: edu_sft         保存: edu_dpo        保存: edu_grpo
-         ↓                                       ↓
+┌──────────────┐                            ┌──────────────┐
+│   SFT 阶段    │ ──────────────→            │   GRPO 阶段   │
+│   监督微调    │   从 SFT 权重初始化策略     │   强化优化    │
+├──────────────┤                            ├──────────────┤
+│ 使用数据:     │                            │ 使用数据:     │
+│ 22个数据集    │                            │ 5K 精选       │
+│ ~222K 条      │                            │ CMMU/MMSci等 │
+├──────────────┤                            ├──────────────┤
+│ Dataset:      │                            │ Dataset:      │
+│ EduDataset    │                            │ EduGRPODataset│
+├──────────────┤                            ├──────────────┤
+│ Loss:         │                            │ Loss:         │
+│ CrossEntropy  │                            │ PPO-clip      │
+│               │                            │               │
+├──────────────┤                            ├──────────────┤
+│ 评估:         │                            │ 评估:         │
+│ --stage sft   │                            │ --stage grpo  │
+│ 19 个评估集   │                            │ 奖励质量(5K)  │
+├──────────────┤                            ├──────────────┤
+│ 目标指标:     │                            │ 目标指标:     │
+│ 准确率>50%    │                            │ avg_reward    │
+│ 步骤率>60%    │                            │   >0.5       │
+└──────────────┘                            └──────────────┘
+         ↓                                           ↓
+    保存: edu_sft                              保存: edu_grpo
+                                                     ↓
     ┌─────────────────────────────────────────────┐
     │          最终发布评估: --stage full          │
-    │  ScienceQA test holdout (4,241)             │
-    │  C-Eval holdout (500)                       │
+    │  19 个评估集全量 + 引导性分析                 │
     └─────────────────────────────────────────────┘
 ```
 
-## 📊 数据集总览（12 个，106,198 条）
+> **💡 为什么去掉了 DPO 阶段？**
+> - 当前 DPO 偏好数据采用「简单截断原回答」构造，本质是「长度偏好」而非「质量偏好」
+> - GRPO 的奖励模型已能直接优化「引导性」维度，比 DPO 间接学习更直接
+> - 避免错误偏好信号风险，训练流程更简洁
+> - 详细分析见 [EVAL_DESIGN.md](EVAL_DESIGN.md) 第八章
 
-| 类别 | 数据集 | 语言 | 条数 | 含图 | 用途 | 阶段 |
-|------|--------|:----:|:----:|:----:|------|:----:|
-| **核心图文数学** | ScienceQA | EN | 6,218 | ✅ | 全理科图文，带 lecture 解析 | SFT+DPO+GRPO |
-| | MathVerse | EN | 3,940 | ✅ | 数学 VLM 推理 | SFT |
-| | MathVista | EN | 1,000 | ✅ | 数学视觉推理 | SFT |
-| **OCR 识别** | OCR-VQA | EN | 20,000 | ✅ | OCR 图文题（降权20-30%） | SFT⚠️ |
-| **图表理解** | ChartQA | EN | 10,000 | ✅ | 柱状图/折线图/饼图问答 | SFT |
-| **中文理科** | C-Eval | CN | 2,654 | ❌ | 中文理科14个学科 | SFT |
-| | CMMLU | CN | 11,917 | ❌ | 中文67学科综合 | SFT |
-| **中文数学** | Ape210K | CN | 20,000 | ❌ | 中文小学数学大规模 | SFT |
-| | **OpenR1-Math K12** 🆕 | CN | 20,000 | ❌ | 中文 K12 数学推理链（CoT）| SFT |
-| | **Gaokao MathQA** 🆕 | CN | 351 | ❌ | 高考数学选择题 | SFT |
-| | **Gaokao MathCloze** 🆕 | CN | 118 | ❌ | 高考数学填空题 | SFT |
-| **语言理解** | RACE | CN/EN | 10,000 | ❌ | 中英文阅读理解 | SFT |
-| | **合计** | | **106,198** | | | |
+## 📊 数据集总览（22 个，~222,198 条训练数据 + 8,950 条评估数据）
+
+| 类别 | 数据集 | 语言 | 训练条数 | 评估条数 | 特点 |
+|------|--------|:----:|:--------:|:--------:|------|
+| **核心中文图文（新增）** | We-Math 2.0 | CN | ~10,000 | 500 | 系统性知识体系 |
+| | Geo170K | CN | 50,000 | 500 | 几何推理专项 |
+| **中文多学科图文做题（新增）** | CMMU | CN | 1,800 | 200 | K12 7 门核心学科 |
+| | CMMMU | CN | 3,000 | 200 | 大学 6 大类 30+ 学科 |
+| | M3Exam | CN | 3,000 | 200 | 多语言 K12 三阶段 |
+| | MMSciBench | CN | 1,000 | 100 | 中学数学+物理 |
+| **核心图文数学** | ScienceQA | EN | 6,218 | 932 | 全理科图文 |
+| | MathVerse | EN | 3,940 | 591 | 数学VLM推理 |
+| | MathVista | EN | 1,000 | 150 | 数学视觉推理 |
+| **中文图文** | windata-math | CN | 10,000 | 500 | 中文数学图文 |
+| **OCR 识别** | OCR-VQA | EN | 20,000 | 1,000 | OCR图文题 |
+| **图表理解** | ChartQA | EN | 10,000 | 1,000 | 柱状图/折线图/饼图 |
+| **中文理科** | C-Eval | CN | 2,654 | 500 | 中文理科14学科 |
+| | CMMLU | CN | 11,917 | 1,000 | 中文67学科综合 |
+| **中文数学** | Ape210K | CN | 20,000 | 1,000 | 中文小学数学 |
+| | OpenR1-Math K12 | CN | 20,000 | 1,000 | 中文K12数学CoT |
+| | Gaokao MathQA | CN | 351 | 351 | 高考数学选择题 |
+| | Gaokao MathCloze | CN | 118 | 118 | 高考数学填空题 |
+| **语言理解** | RACE | CN/EN | 10,000 | 1,000 | 中英文阅读理解 |
+| | **合计** | | **~222,198** | **8,950** | |
+
+> **已删除数据集**（GitHub 仓库缺 JSON 元数据或下载不稳定）：CMM-Math、MathReal、We-Math 2.0（备份在 `download_all_data.py` 中已注释）
+
+### 数据分布
+
+| 指标 | 数值 |
+|------|------|
+| **总训练数据** | ~222,198 条 |
+| **总评估数据** | 8,950 条 |
+| **中文图文数据** | ~116,000 条 |
+| **中文图文占比** | 52.2% |
+| **训练数据集数** | 22 个 |
+| **评估数据集数** | 19 个 |
+
+## 📦 数据集下载
+
+详细的数据集来源、许可协议、下载方式和使用说明，请参阅 [DATA.md](DATA.md)。
+
+### 一键下载
+
+```bash
+# 下载所有训练数据集和评估数据集
+python scripts/download_all_data.py
+
+# 仅下载训练数据集
+python scripts/download_all_data.py --train
+
+# 仅创建评估数据集（需要先有训练集）
+python scripts/download_all_data.py --eval
+
+# 下载指定数据集
+python scripts/download_all_data.py --datasets scienceqa ceval
+```
+
+### 数据集结构
+
+```
+dataset/
+├── edu_*.parquet              # 训练数据集 (~222,198 条)
+│   ├── edu_science.parquet     # ScienceQA
+│   ├── edu_ceval.parquet       # C-Eval
+│   ├── edu_cmmu.parquet        # CMMU（中文多学科）
+│   ├── edu_geo170k.parquet     # Geo170K（几何推理）
+│   └── ... (共 22 个)
+│
+├── eval/                      # 评估数据集 (8,950 条)
+│   ├── eval_science.parquet    # ScienceQA 评估集
+│   ├── eval_ceval.parquet      # C-Eval 评估集
+│   └── ... (共 19 个)
+│
+└── ...
+```
+
+> **⚠️ 仓库不包含 parquet 文件**（已通过 .gitignore 排除，避免仓库过大）。运行 `python scripts/download_all_data.py` 一键下载。
 
 ## 📋 评估方法
 
@@ -72,9 +155,10 @@
 
 | 训练阶段 | 评估方式 | 命令 | 说明 |
 |----------|----------|------|------|
-| **SFT 训练后** | 全量评估（12 个数据集） | `python eval_edu.py --model_path out/edu_sft --eval_all --max_samples 500` | 在所有 holdout 数据集上评估，观察每个数据集的能力变化 |
-| **DPO 训练后** | 重点检查 3 个核心集 | `--eval_dataset scienceqa` + `--eval_dataset openr1_math` + `--eval_dataset cmmlu` | DPO 只增强偏好对齐，检查基础能力是否退化 |
-| **GRPO 训练后** | 细粒度分析 | `--eval_dataset scienceqa --max_samples 200` | 检查五维度奖励（准确性/完整性/流畅性/引导性/规范性） |
+| **基线 (baseline)** | 保存基座性能 | `python eval_edu.py --stage baseline --eval_all --max_samples 200` | 记录 19 个评估集基线分数到 `eval_results/baseline.json` |
+| **SFT 训练后** | 全量评估（19 个数据集） | `python eval_edu.py --stage sft --model_path out/edu_sft --eval_all --max_samples 200` | 在所有 19 个 holdout 数据集上评估，观察每个数据集的能力变化 |
+| **GRPO 训练后** | 四维评估（基础+奖励+细粒度+退化） | `python eval_edu.py --stage grpo --model_path out/edu_grpo --max_samples 200` | 评估 GRPO 奖励质量 + EduRewardModel 五维度细粒度 + 退化检测 |
+| **最终发布 (full)** | 全量 holdout | `python eval_edu.py --stage full --model_path out/edu_grpo --eval_all --max_samples 500` | 19 个评估集全量 + ScienceQA test split 全量(4241) |
 
 **👉 核心原则：训练完每个阶段后，立即运行 `--eval_all` 全量评估，对比前后分数变化，确保新阶段没有破坏已有能力。**
 
@@ -99,22 +183,36 @@ python scripts/resample_data.py
 | **数据重采样** | `scripts/resample_data.py` | 分析各数据集得分，得分低的数据集自动提高训练权重 |
 | **结果持久化** | `eval_edu.py`（已集成）| 所有阶段评估结果自动保存到 `eval_results/`，附带时间戳 |
 
-### 12 个评估数据集
+### 19 个评估数据集
 
 | 评估数据集 | 评估命令 | 条数 | 评估指标 |
 |-----------|----------|------|----------|
+| **中文核心图文数学（新增）** | | | |
+| We-Math 2.0 | `--eval_dataset we_math` | 500 | 选项匹配率 + 步骤完整率 |
+| Geo170K | `--eval_dataset geo170k` | 500 | 答案匹配率 + 步骤完整率 |
+| windata-math | `--eval_dataset windata_math` | 500 | 答案匹配率 |
+| **中文多学科图文做题（新增）** | | | |
+| CMMU | `--eval_dataset cmmu` | 200 | 选项匹配率 + 步骤完整率 |
+| CMMMU | `--eval_dataset cmmmu` | 200 | 选项匹配率 |
+| M3Exam | `--eval_dataset m3exam` | 200 | 选项匹配率 |
+| MMSciBench | `--eval_dataset mmscibench` | 100 | 答案匹配率 + 步骤完整率 |
+| **核心图文数学** | | | |
 | ScienceQA | `--eval_dataset scienceqa` | 932 | 答案准确率 + 步骤完整率 + 启发式引导率 |
-| C-Eval | `--eval_dataset ceval` | 500 | 选项匹配率 |
-| OCR-VQA | `--eval_dataset ocr` | 1,000 | 关键词匹配率 |
-| Ape210K | `--eval_dataset ape210k` | 1,000 | 关键词匹配率 |
-| OpenR1-Math | `--eval_dataset openr1_math` | 1,000 | 关键词匹配率 + 步骤完整率 |
-| ChartQA | `--eval_dataset chartqa` | 1,000 | 答案匹配率 |
-| CMMLU | `--eval_dataset cmmlu` | 1,000 | 选项匹配率 |
 | MathVerse | `--eval_dataset math_verse` | 591 | 关键词匹配率 |
 | MathVista | `--eval_dataset math_vista` | 150 | 答案匹配率 |
-| RACE | `--eval_dataset race` | 1,000 | 选项匹配率 |
+| **OCR 识别与图表** | | | |
+| OCR-VQA | `--eval_dataset ocr` | 1,000 | 关键词匹配率 |
+| ChartQA | `--eval_dataset chartqa` | 1,000 | 答案匹配率 |
+| **中文理科与数学** | | | |
+| C-Eval | `--eval_dataset ceval` | 500 | 选项匹配率 |
+| CMMLU | `--eval_dataset cmmlu` | 1,000 | 选项匹配率 |
+| Ape210K | `--eval_dataset ape210k` | 1,000 | 关键词匹配率 |
+| OpenR1-Math | `--eval_dataset openr1_math` | 1,000 | 关键词匹配率 + 步骤完整率 |
 | Gaokao MathQA | `--eval_dataset gaokao_mathqa` | 351 | 选项匹配率 |
 | Gaokao MathCloze | `--eval_dataset gaokao_mathcloze` | 118 | 数值匹配率 |
+| **语言理解** | | | |
+| RACE | `--eval_dataset race` | 1,000 | 选项匹配率 |
+| **合计** | | **~8,950** | |
 
 ### 评估指标说明
 
@@ -135,27 +233,41 @@ qwensearch/
 │   └── qwen_vlm.py               # Qwen2-VL 封装（可插拔基座 + LoRA）
 ├── dataset/                       # 数据层
 │   ├── __init__.py
-│   ├── edu_dataset.py            # EduDataset / EduDPODataset / EduGRPODataset
-│   ├── *.parquet                 # 12个已下载数据集（106,198条）
-│   └── eval/                     # 12个评估 holdout 集
-├── scripts/                       # 工具脚本
-│   ├── convert_edu_data.py       # 数据集格式转换（支持26种格式）
-│   ├── web_demo.py               # Gradio Web 演示
-│   ├── create_eval_sets.py       # 创建评估 holdout 集
-│   └── resample_data.py          # 评估反馈数据重采样 🆕
-├── trainer/                       # 训练层
+│   ├── edu_dataset.py            # 数据集加载器
+│   └── eval/                     # 评估数据集
+├── scripts/                      # 工具脚本
 │   ├── __init__.py
-│   ├── train_sft.py              # SFT 微调训练（默认12个数据集）
-│   ├── train_dpo.py              # DPO 偏好对齐
-│   ├── train_grpo.py             # GRPO 强化优化
-│   ├── reward_model.py           # EduRewardModel（五维度教育奖励）
-│   └── trainer_utils.py          # 训练工具函数
-├── eval_edu.py                    # 多数据集评估脚本（支持 --eval_all）
-├── compare_evals.py               # 评估结果对比工具 🆕
-├── download_data.py               # 一键下载 21 个数据集
-├── DATA.md                        # 数据集全览
-├── requirements.txt
-└── README.md
+│   ├── download_all_data.py       # 一键下载所有数据集
+│   ├── convert_edu_data.py        # 数据集格式转换
+│   ├── convert_windata.py         # windata 数据转换
+│   ├── create_eval_sets.py        # 创建评估集
+│   ├── web_demo.py                # Web 演示
+│   │
+│   ├── eval/                      # 🆕 评估相关脚本
+│   │   ├── __init__.py
+│   │   ├── edu_evaluate.py        # 一站式评估入口（run/compare/errors/meta/report/all）
+│   │   ├── eval_edu.py            # 主评估脚本（含 Bootstrap 置信区间）
+│   │   ├── compare_evals.py       # 评估结果对比 v2（含 95%CI + p-value）
+│   │   ├── analyze_errors.py      # 错误案例分析（自动归类）
+│   │   ├── meta_evaluation.py     # 元评估（指标一致性 + LLM Judge）
+│   │   └── generate_report.py     # 自动生成 Markdown 评估报告
+│   │
+│   └── optimize/                  # 🆕 优化相关脚本
+│       ├── __init__.py
+│       ├── edu_optimize.py        # 一站式优化入口（resample/build/retrain/auto）
+│       ├── resample_data.py       # 数据重采样 v2（平滑公式 + 样本量修正）
+│       ├── build_preference_data.py  # GRPO 强化数据准备（5K 精选）
+│       └── wandb_integration.py   # 训练监控（wandb/SwanLab/TensorBoard）
+├── trainer/                      # 训练层
+│   ├── __init__.py
+│   ├── train_sft.py              # SFT 微调训练（22 个数据集，加权采样）
+│   ├── train_grpo.py             # GRPO 强化优化（从 SFT 衔接，5K 精选）
+│   ├── reward_model.py           # 教育奖励模型（五维度细粒度）
+│   └── trainer_utils.py          # 训练工具
+├── EVAL_DESIGN.md               # 评估系统设计文档
+├── DATA.md                      # 数据集说明
+├── README.md
+└── requirements.txt
 ```
 
 ## 🚀 快速开始
@@ -220,35 +332,92 @@ modelscope download --model qwen/Qwen2-VL-2B-Instruct --local_dir ./model/Qwen2-
 ### 3. 下载数据集
 
 ```bash
-python download_data.py
+# 一键下载所有 22 个训练数据集和 19 个评估数据集
+python scripts/download_all_data.py
+
+# 或分步下载
+python scripts/download_all_data.py --train    # 仅训练集
+python scripts/download_all_data.py --eval     # 仅评估集
 ```
 
-### 4. 打基线 + 训练 + 评估
+### 4. 打基线 + 训练 + 评估（SFT → GRPO 两阶段）
+
+> **💡 简化命令**：可使用 `python scripts/eval/edu_evaluate.py all ...` 一键完成 ①②③⑨⑩
 
 ```bash
-# ① 训练前打基线
-python eval_edu.py --stage baseline --max_samples 500
+# ① 训练前打基线（19 个数据集全量）
+python scripts/eval/eval_edu.py --stage baseline --eval_all --max_samples 200
 
-# ② SFT 微调（默认使用全部12个数据集）
+# ② SFT 微调（默认使用全部 22 个数据集，加权采样）
 python trainer/train_sft.py --epochs 3 --save_weight edu_sft
 
-# ③ SFT 后评估
-python eval_edu.py --stage sft --model_path out/edu_sft --max_samples 500
+# ③ SFT 后全量评估（19 个数据集）
+python scripts/eval/eval_edu.py --stage sft --model_path out/edu_sft --eval_all --max_samples 200
 
-# ④ DPO 对齐
-python trainer/train_dpo.py --data_path dataset/edu_science.parquet --from_weight ../out/edu_sft --epochs 1
+# ④ 错误案例分析（可选，定位退化原因）
+python scripts/eval/analyze_errors.py --output_errors errors.json
 
-# ⑤ DPO 后评估
-python eval_edu.py --stage dpo --model_path out/edu_dpo --max_samples 100
+# ⑤ 对比 vs 基线（带统计显著性）
+python scripts/eval/compare_evals.py --show_weak_datasets
 
-# ⑥ GRPO 优化
-python trainer/train_grpo.py --data_path dataset/edu_science.parquet --from_weight ../out/edu_dpo --epochs 1
+# ⑥ 生成 GRPO 强化数据（5K 精选）
+python scripts/optimize/build_preference_data.py
 
-# ⑦ GRPO 后评估
-python eval_edu.py --stage grpo --model_path out/edu_grpo --max_samples 100
+# ⑦ GRPO 优化（直接从 SFT 衔接，跳过 DPO）
+python trainer/train_grpo.py --from_weight ../out/edu_sft --epochs 1
 
-# ⑧ 最终全量评估
-python eval_edu.py --stage full --model_path out/edu_grpo --max_samples -1
+# ⑧ GRPO 后四维评估（基础 + 奖励 + 细粒度 + 退化）
+python scripts/eval/eval_edu.py --stage grpo --model_path out/edu_grpo --max_samples 200
+
+# ⑨ 元评估（检查指标一致性）
+python scripts/eval/meta_evaluation.py --check_consistency
+
+# ⑩ 最终全量评估发布
+python scripts/eval/eval_edu.py --stage full --model_path out/edu_grpo --eval_all --max_samples -1
+```
+
+### 5. 训练监控（🆕）
+
+支持 wandb / SwanLab / TensorBoard / 本地 JSON 自动降级：
+
+```python
+# 在训练脚本中集成
+from scripts.wandb_integration import TrainingLogger
+
+logger = TrainingLogger(backend="auto", project="qwensearch", config={...})
+for step, batch in enumerate(dataloader):
+    loss = train_step(model, batch)
+    logger.log({"train/loss": loss, "train/lr": scheduler.get_last_lr()[0]}, step=step)
+logger.log_artifact("out/edu_sft/pytorch_model.bin", name="model")
+logger.finish()
+```
+
+### 6. 评估反馈闭环（🆕）
+
+训练 → 评估 → 弱项分析 → 重采样 → 重新训练：
+
+```bash
+# 1. 训练 + 评估（自动保存到 eval_results/）
+python trainer/train_sft.py --epochs 3
+python scripts/eval_edu.py --stage sft --model_path out/edu_sft --eval_all
+
+# 2. 对比 vs 基线 + 弱项识别
+python scripts/compare_evals.py --show_weak_datasets
+
+# 3. 错误案例分析
+python scripts/analyze_errors.py
+
+# 4. 元评估（监控指标可靠性）
+python scripts/meta_evaluation.py --check_consistency
+
+# 5. 生成重采样权重（v2 平滑公式）
+python scripts/resample_data.py --output weights.json
+
+# 6. 用新权重重新训练
+python trainer/train_sft.py --data_paths "..." --epochs 2
+
+# 7. 自动生成评估报告
+python scripts/generate_report.py --output report.md
 ```
 
 ### 5. Web Demo
@@ -257,12 +426,18 @@ python eval_edu.py --stage full --model_path out/edu_grpo --max_samples -1
 python scripts/web_demo.py --model_path out/edu_grpo
 ```
 
-## 📜 License
+## � 相关文档
+
+- [DATA.md](DATA.md) — 数据集详细说明（22 个数据集的来源/许可/特点/下载）
+- [EVAL_DESIGN.md](EVAL_DESIGN.md) — 评估系统设计文档（19 个评估集 + 4 阶段评估 + 8 个工具脚本）
+
+## �� License
 
 本项目基于 [Apache 2.0](LICENSE) 协议开源。基座模型 Qwen2-VL 遵循其原始协议。
 
-## � 致谢
+## 🙏 致谢
 
-- [MiniMind-V](https://github.com/jingyaogong/minimind-v) — 项目架构参考
+- [MiniMind-V](https://github.com/jingyaogong/minimind-v) — 项目架构参考，README 风格借鉴
 - [Qwen-VL](https://github.com/QwenLM/Qwen-VL) — 基座多模态模型
-- [ScienceQA](https://scienceqa.github.io/) / [MathVerse](https://mathverse-cuhk.github.io/) / [MathVista](https://mathvista.github.io/) / [C-Eval](https://cevalbenchmark.com/) — 数据集来源
+- [ScienceQA](https://scienceqa.github.io/) / [MathVerse](https://mathverse-cuhk.github.io/) / [MathVista](https://mathvista.github.io/) / [C-Eval](https://cevalbenchmark.com/) / [CMMU](https://github.com/FlagOpen/CMMU) / [CMMMU](https://github.com/m-a-p/CMMMU) / [M3Exam](https://github.com/DAMO-NLP-SG/M3Exam) / [MMSciBench](https://github.com/XinwuYe/MMSciBench) — 数据集来源
+- [HuggingFace Datasets](https://huggingface.co/docs/datasets) — 数据加载框架

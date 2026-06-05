@@ -1117,6 +1117,175 @@ def convert_gaokao_mathcloze(output_path, max_samples=None):
     save_parquet(records, output_path)
 
 
+def convert_we_math(output_path, max_samples=None):
+    """转换 We-Math 2.0 数据集（系统性数学知识体系）"""
+    from datasets import load_dataset
+    print("下载 We-Math 2.0 数据集...")
+    try:
+        ds = load_dataset("We-Math/We-Math2.0-Standard", split="train", streaming=True)
+    except Exception as e:
+        print(f"We-Math 2.0 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 We-Math 2.0"):
+        try:
+            # 提取问题文本
+            question = item.get('problem', item.get('question', ''))
+            answer = item.get('answer', item.get('solution', ''))
+            
+            # 构建对话
+            conversations = [
+                {"role": "system", "content": EDU_SYSTEM_PROMPT},
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": f"答案：{answer}"},
+            ]
+            
+            # 处理图像
+            image = item.get('image') or item.get('img')
+            if image:
+                image_bytes = encode_image(image)
+            else:
+                placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
+                image_bytes = encode_image(placeholder)
+            
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"We-Math 2.0: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_geo170k(output_path, max_samples=None):
+    """转换 Geo170K 数据集（几何推理专项）"""
+    from datasets import load_dataset
+    print("下载 Geo170K 数据集...")
+    try:
+        ds = load_dataset("Luckyjhg/Geo170K", split="train", streaming=True)
+    except Exception as e:
+        print(f"Geo170K 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 Geo170K"):
+        try:
+            # 提取问题和答案
+            question = item.get('question', item.get('problem', ''))
+            answer = str(item.get('answer', item.get('solution', '')))
+            
+            # 构建对话
+            conversations = [
+                {"role": "system", "content": "你是一位几何推理老师，请仔细观察图形，理解问题并给出解答。"},
+                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "assistant", "content": f"答案：{answer}"},
+            ]
+            
+            # 处理图像
+            image = item.get('image') or item.get('img')
+            if image:
+                image_bytes = encode_image(image)
+            else:
+                placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
+                image_bytes = encode_image(placeholder)
+            
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"Geo170K: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_cmm_math(output_path, max_samples=None):
+    """转换 CMM-Math 数据集（中文K12数学图文）"""
+    from datasets import load_dataset
+    print("下载 CMM-Math 数据集...")
+    try:
+        # 尝试从 GitHub 或 HuggingFace 加载
+        ds = load_dataset("ECNU-ICALK/EduChat-Math", "CMM-Math", split="train", streaming=True)
+    except Exception as e1:
+        try:
+            ds = load_dataset("wangronglu/CEIM-Dataset", split="train", streaming=True)
+        except Exception as e2:
+            print(f"CMM-Math 加载失败: {e1}, {e2}")
+            return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 CMM-Math"):
+        try:
+            # 提取问题和答案
+            question = item.get('question', item.get('problem', ''))
+            answer = item.get('answer', item.get('solution', ''))
+            
+            # 构建对话
+            conversations = [
+                {"role": "system", "content": EDU_SYSTEM_PROMPT},
+                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "assistant", "content": f"答案：{answer}"},
+            ]
+            
+            # 处理图像
+            image = item.get('image') or item.get('img')
+            if image:
+                image_bytes = encode_image(image)
+            else:
+                placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
+                image_bytes = encode_image(placeholder)
+            
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"CMM-Math: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_math_real(output_path, max_samples=None):
+    """转换 MathReal 数据集（真实场景K12数学）"""
+    from datasets import load_dataset
+    print("下载 MathReal 数据集...")
+    try:
+        # 从 HuggingFace 加载
+        ds = load_dataset("MathReal/MathReal", split="train", streaming=True)
+    except Exception as e:
+        print(f"MathReal 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 MathReal"):
+        try:
+            # 提取问题和答案
+            question = item.get('question', item.get('problem', ''))
+            answer = str(item.get('answer', item.get('solution', '')))
+            
+            # 构建对话
+            conversations = [
+                {"role": "system", "content": "你是一位数学老师，请仔细观察图片，理解真实场景中的数学问题并给出解答。"},
+                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "assistant", "content": f"答案：{answer}"},
+            ]
+            
+            # 处理图像
+            image = item.get('image') or item.get('img')
+            if image:
+                image_bytes = encode_image(image)
+            else:
+                placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
+                image_bytes = encode_image(placeholder)
+            
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"MathReal: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
 CONVERTERS = {
     'scienceqa': convert_scienceqa,
     'mathverse': convert_mathverse,
@@ -1142,6 +1311,11 @@ CONVERTERS = {
     'openr1_math': convert_openr1_math,
     'gaokao_mathqa': convert_gaokao_mathqa,
     'gaokao_mathcloze': convert_gaokao_mathcloze,
+    # 新增数据集
+    'we_math': convert_we_math,
+    'geo170k': convert_geo170k,
+    'cmm_math': convert_cmm_math,
+    'math_real': convert_math_real,
 }
 
 

@@ -1,6 +1,8 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
+*$py.class
 *.so
 *.egg-info/
 dist/
@@ -21,8 +23,15 @@ checkpoints/
 !model/tokenizer.json
 !model/tokenizer_config.json
 
+# Evaluation results
+eval_results/
+
 # Datasets
 !dataset/.gitkeep
+*.parquet
+*.parquet.gzip
+dataset/edu_*.parquet
+dataset/eval/eval_*.parquet
 
 # IDE
 .vscode/
@@ -44,3 +53,13 @@ transformers_modules/
 
 # Misc
 *.tmp
+*.bak
+*.backup
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/

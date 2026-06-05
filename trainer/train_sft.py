@@ -158,6 +158,7 @@ if __name__ == "__main__":
     data_paths = args.data_paths.split(",")
     Logger(f'[SFT] Loading datasets: {data_paths}')
     all_datasets = []
+    dataset_sizes = []
     for path in data_paths:
         path = path.strip()
         if os.path.exists(path):
@@ -168,6 +169,7 @@ if __name__ == "__main__":
                 add_system_ratio=1.0,
             )
             all_datasets.append(ds)
+            dataset_sizes.append(len(ds))
             Logger(f'  - {path}: {len(ds)} samples')
 
     if len(all_datasets) == 1:
@@ -176,7 +178,25 @@ if __name__ == "__main__":
         from torch.utils.data import ConcatDataset
         train_ds = ConcatDataset(all_datasets)
 
-    train_sampler = DistributedSampler(train_ds) if dist.is_initialized() else None
+        # 加权采样：平方根倒数加权，使小数据集有更大的采样概率
+        # 避免大数据集主导训练
+        import math
+        dataset_weights = [1.0 / math.sqrt(size) for size in dataset_sizes]
+        total_weight = sum(dataset_weights)
+        sample_weights = []
+        for i, ds in enumerate(all_datasets):
+            weight = dataset_weights[i] / total_weight
+            sample_weights.extend([weight] * len(ds))
+
+        from torch.utils.data import WeightedRandomSampler
+        weighted_sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(train_ds),
+            replacement=True,
+        )
+        Logger(f'[SFT] Weighted sampling: weights={[f"{w:.4f}" for w in dataset_weights]}')
+
+    train_sampler = weighted_sampler if len(all_datasets) > 1 else (DistributedSampler(train_ds) if dist.is_initialized() else None)
 
     # ========== 7. 优化器 ==========
     scaler = torch.cuda.amp.GradScaler(enabled=(args.dtype == 'float16'))
