@@ -500,7 +500,8 @@ def convert_ape210k(output_path, max_samples=None):
     from datasets import load_dataset
     print("下载 Ape210K 数据集...")
     ds = None
-    for name in ["Ape210K/Ape210K", "Chenny0808/ape210k", "EvanWang/ape210k"]:
+    # 新 HF 路径：MU-NLPC/Calc-ape210k
+    for name in ["MU-NLPC/Calc-ape210k", "Ape210K/Ape210K", "Chenny0808/ape210k", "EvanWang/ape210k"]:
         try:
             ds = load_dataset(name, split="train", streaming=True)
             break
@@ -513,9 +514,13 @@ def convert_ape210k(output_path, max_samples=None):
     skipped = 0
     for item in tqdm(ds, desc="处理 Ape210K"):
         try:
-            question = item.get('question', item.get('text', ''))
-            answer = item.get('answer', item.get('equation', ''))
+            # 兼容多种字段名
+            question = item.get('question_chinese') or item.get('question') or item.get('text', '')
+            answer = str(item.get('result') or item.get('answer') or item.get('equation', ''))
+            solution = item.get('chain', '')
             answer_text = f"答案：{answer}"
+            if solution:
+                answer_text = f"解析：{solution}\n\n{answer_text}"
             conversations = [
                 {"role": "system", "content": EDU_SYSTEM_PROMPT},
                 {"role": "user", "content": f"<image>\n{question}"},
@@ -537,47 +542,58 @@ def convert_ape210k(output_path, max_samples=None):
 
 def convert_mmmu(output_path, max_samples=None):
     """转换 MMMU 数据集（30学科多模态大学级图文题，含中文图表）"""
-    from datasets import load_dataset
+    from datasets import load_dataset, get_dataset_config_names
     print("下载 MMMU 数据集...")
     try:
-        ds = load_dataset("MMMU/MMMU", split="test", streaming=True)
-    except Exception as e:
-        print(f"MMMU 加载失败: {e}")
+        configs = get_dataset_config_names("MMMU/MMMU")
+    except Exception:
+        configs = []
+    if not configs:
+        print("MMMU 加载失败: 无法获取 config 列表")
         return
+    print(f"  MMMU 共 {len(configs)} 个学科 config，逐个处理...")
     records = []
     skipped = 0
-    for item in tqdm(ds, desc="处理 MMMU"):
+    for cfg in configs:
         try:
-            # MMMU 字段因学科而异，尽量兼容
-            question = item.get('question', '')
-            options = item.get('options', item.get('choices', ''))
-            if isinstance(options, list):
-                question += "\n" + "\n".join(f"{chr(65+i)}. {o}" for i, o in enumerate(options))
-            elif isinstance(options, str) and options:
-                question += "\n" + options
-            answer = str(item.get('answer', item.get('gt', '')))
-            explanation = item.get('explanation', item.get('rationale', ''))
-            answer_text = f"答案：{answer}"
-            if explanation:
-                answer_text = f"解析：{explanation}\n\n{answer_text}"
-            # MMMU 图像字段可能是 image_1, image_2, image, images 等
-            image = item.get('image_1') or item.get('image') or item.get('images')
-            if isinstance(image, list) and len(image) > 0:
-                image = image[0]
-            if image is None:
-                placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
-                image = placeholder
-            conversations = [
-                {"role": "system", "content": EDU_SYSTEM_PROMPT},
-                {"role": "user", "content": f"<image>\n{question}"},
-                {"role": "assistant", "content": answer_text},
-            ]
-            image_bytes = encode_image(image)
-            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            ds = load_dataset("MMMU/MMMU", cfg, split="test", streaming=True)
+        except Exception:
+            continue
+        for item in ds:
+            try:
+                question = item.get('question', '')
+                options = item.get('options', item.get('choices', ''))
+                if isinstance(options, list):
+                    question += "\n" + "\n".join(f"{chr(65+i)}. {o}" for i, o in enumerate(options))
+                elif isinstance(options, str) and options:
+                    question += "\n" + options
+                answer = str(item.get('answer', item.get('gt', '')))
+                explanation = item.get('explanation', item.get('rationale', ''))
+                answer_text = f"答案：{answer}"
+                if explanation:
+                    answer_text = f"解析：{explanation}\n\n{answer_text}"
+                image = item.get('image_1') or item.get('image') or item.get('images')
+                if isinstance(image, list) and len(image) > 0:
+                    image = image[0]
+                if image is None:
+                    placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
+                    image = placeholder
+                conversations = [
+                    {"role": "system", "content": EDU_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"<image>\n{question}"},
+                    {"role": "assistant", "content": answer_text},
+                ]
+                image_bytes = encode_image(image)
+                records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+                if max_samples and len(records) >= max_samples:
+                    break
+            except Exception:
+                skipped += 1
             if max_samples and len(records) >= max_samples:
                 break
-        except Exception:
-            skipped += 1
+        if max_samples and len(records) >= max_samples:
+            break
+        print(f"  MMMU/{cfg}: 累计 {len(records)} 条")
     print(f"MMMU: 成功 {len(records)} 条, 跳过 {skipped} 条")
     save_parquet(records, output_path)
 
@@ -587,7 +603,7 @@ def convert_geoqa(output_path, max_samples=None):
     from datasets import load_dataset
     print("下载 GeoQA 数据集...")
     ds = None
-    for name in ["GeoQA/GeoQA-Plus", "AIM3/GeoQA"]:
+    for name in ["leonardPKU/GEOQA_R1V_Train_8K", "GeoQA/GeoQA-Plus", "AIM3/GeoQA"]:
         try:
             ds = load_dataset(name, split="train", streaming=True)
             break
@@ -604,15 +620,10 @@ def convert_geoqa(output_path, max_samples=None):
             if image is None:
                 skipped += 1
                 continue
-            question = item.get('question', item.get('text', ''))
-            choices = item.get('choices', item.get('options', []))
-            if isinstance(choices, list) and choices:
-                question += "\n" + "\n".join(f"{chr(65+i)}. {c}" for i, c in enumerate(choices))
-            answer = str(item.get('answer', item.get('gt', '')))
-            explanation = item.get('explanation', item.get('solution', ''))
+            # 兼容多种字段名
+            question = item.get('problem') or item.get('question', item.get('text', ''))
+            answer = str(item.get('solution') or item.get('answer', item.get('gt', '')))
             answer_text = f"答案：{answer}"
-            if explanation:
-                answer_text = f"解析：{explanation}\n\n{answer_text}"
             conversations = [
                 {"role": "system", "content": EDU_SYSTEM_PROMPT},
                 {"role": "user", "content": f"<image>\n{question}"},
@@ -672,25 +683,28 @@ def convert_geometry3k(output_path, max_samples=None):
     """转换 Geometry3K 数据集（几何图文题，含详细解析）"""
     from datasets import load_dataset
     print("下载 Geometry3K 数据集...")
-    try:
-        ds = load_dataset("MMInstruction/Geometry3K", split="train", streaming=True)
-    except Exception as e:
-        print(f"Geometry3K 加载失败: {e}")
+    ds = None
+    for name in ["hiyouga/geometry3k", "MMInstruction/Geometry3K"]:
+        try:
+            ds = load_dataset(name, split="train", streaming=True)
+            break
+        except Exception:
+            continue
+    if ds is None:
+        print("Geometry3K 所有镜像加载失败，跳过")
         return
     records = []
     skipped = 0
     for item in tqdm(ds, desc="处理 Geometry3K"):
         try:
-            image = item.get('image')
+            # 兼容多种字段名
+            image = item.get('images') or item.get('image')
             if image is None:
                 skipped += 1
                 continue
-            question = item.get('question', '')
-            choices = item.get('choices', [])
-            if choices:
-                question += "\n" + "\n".join(f"{chr(65+i)}. {c}" for i, c in enumerate(choices))
+            question = item.get('problem') or item.get('question', '')
             answer = item.get('answer', '')
-            solution = item.get('solution', item.get('explanation', item.get('rationale', '')))
+            solution = item.get('solution', item.get('explanation', ''))
             answer_text = f"答案：{answer}"
             if solution:
                 answer_text = f"解析：{solution}\n\n{answer_text}"
@@ -754,16 +768,22 @@ def convert_dvqa(output_path, max_samples=None):
     """转换 DVQA 数据集（信息图/图表问答）"""
     from datasets import load_dataset
     print("下载 DVQA 数据集...")
-    try:
-        ds = load_dataset("MMInstruction/DVQA", split="train", streaming=True)
-    except Exception as e:
-        print(f"DVQA 加载失败: {e}")
+    ds = None
+    for name in ["DavidNguyen/DVQA", "MMInstruction/DVQA"]:
+        try:
+            ds = load_dataset(name, split="train", streaming=True)
+            break
+        except Exception:
+            continue
+    if ds is None:
+        print("DVQA 所有镜像加载失败，跳过")
         return
     records = []
     skipped = 0
     for item in tqdm(ds, desc="处理 DVQA"):
         try:
-            image = item.get('image')
+            # 兼容 DavidNguyen/DVQA 的 png 字段
+            image = item.get('image') or item.get('png')
             if image is None:
                 skipped += 1
                 continue

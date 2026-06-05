@@ -5,6 +5,19 @@ import subprocess
 
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+# HF_TOKEN 用于访问 gated 数据集，请通过环境变量设置：
+#   set HF_TOKEN=hf_xxx  (Windows)
+#   export HF_TOKEN=hf_xxx  (Linux/Mac)
+# 如果未设置，将尝试从 .env 文件或系统 keyring 读取
+if "HF_TOKEN" not in os.environ:
+    # 尝试读取用户 huggingface-cli 登录凭证
+    try:
+        from huggingface_hub import HfApi, HfFolder
+        saved_token = HfFolder.get_token()
+        if saved_token:
+            os.environ["HF_TOKEN"] = saved_token
+    except Exception:
+        pass
 
 # 要下载的数据集列表（名称，输出文件名，样本限制）
 DATASETS = [
