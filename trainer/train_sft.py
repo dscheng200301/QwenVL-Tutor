@@ -112,7 +112,9 @@ if __name__ == "__main__":
     parser.add_argument("--max_seq_len", type=int, default=2048, help="最大序列长度")
     parser.add_argument("--lora_r", type=int, default=64, help="LoRA rank")
     parser.add_argument("--lora_alpha", type=int, default=128, help="LoRA alpha")
-    parser.add_argument("--data_paths", type=str, default="../dataset/edu_science.parquet", help="数据路径，逗号分隔")
+    parser.add_argument("--data_paths", type=str, 
+        default="../dataset/edu_science.parquet,../dataset/edu_math_verse.parquet,../dataset/edu_math_vista.parquet,../dataset/edu_ocr.parquet,../dataset/edu_ceval.parquet,../dataset/edu_cmmlu.parquet,../dataset/edu_ape210k.parquet,../dataset/edu_chartqa.parquet,../dataset/edu_race.parquet,../dataset/edu_openr1_math.parquet,../dataset/edu_gaokao_mathqa.parquet,../dataset/edu_gaokao_mathcloze.parquet", 
+        help="数据路径，逗号分隔（默认12个数据集）")
     parser.add_argument("--use_lora", type=int, default=1, choices=[0, 1], help="是否使用 LoRA")
     parser.add_argument("--use_wandb", action="store_true", help="是否使用 wandb/swanlab")
     parser.add_argument("--wandb_project", type=str, default="QwenSearch-SFT", help="wandb 项目名")

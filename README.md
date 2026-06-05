@@ -18,8 +18,8 @@
 │   监督微调    │    │   偏好对齐    │    │   强化优化    │
 ├──────────────┤    ├──────────────┤    ├──────────────┤
 │ 使用数据:     │    │ 使用数据:     │    │ 使用数据:     │
-│ 6个数据集     │    │ ScienceQA    │    │ ScienceQA    │
-│ 45,729 条    │    │  6,218 条    │    │  6,218 条    │
+│ 12个数据集    │    │ ScienceQA    │    │ ScienceQA    │
+│ 106,198 条   │    │  6,218 条    │    │  6,218 条    │
 ├──────────────┤    ├──────────────┤    ├──────────────┤
 │ Dataset:      │    │ Dataset:      │    │ Dataset:      │
 │ EduDataset    │    │ EduDPODataset │    │ EduGRPODataset│
@@ -115,19 +115,21 @@ qwensearch/
 ├── dataset/                       # 数据层
 │   ├── __init__.py
 │   ├── edu_dataset.py            # EduDataset / EduDPODataset / EduGRPODataset
-│   └── *.parquet                 # 6个已下载数据集（45,729条）
+│   ├── *.parquet                 # 12个已下载数据集（106,198条）
+│   └── eval/                     # 12个评估 holdout 集
+├── scripts/                       # 工具脚本
+│   ├── convert_edu_data.py       # 数据集格式转换（支持26种格式）
+│   ├── web_demo.py               # Gradio Web 演示
+│   └── create_eval_sets.py       # 创建评估 holdout 集
 ├── trainer/                       # 训练层
 │   ├── __init__.py
-│   ├── train_sft.py              # SFT 微调训练
+│   ├── train_sft.py              # SFT 微调训练（默认12个数据集）
 │   ├── train_dpo.py              # DPO 偏好对齐
 │   ├── train_grpo.py             # GRPO 强化优化
 │   ├── reward_model.py           # EduRewardModel（五维度教育奖励）
 │   └── trainer_utils.py          # 训练工具函数
-├── scripts/                       # 工具脚本
-│   ├── convert_edu_data.py       # 数据集格式转换（支持23种格式）
-│   └── web_demo.py               # Gradio Web 演示
-├── eval_edu.py                    # 六阶段评估脚本
-├── download_data.py               # 一键下载数据集
+├── eval_edu.py                    # 多数据集评估脚本（支持 --eval_all）
+├── download_data.py               # 一键下载 21 个数据集
 ├── DATA.md                        # 数据集全览
 ├── requirements.txt
 └── README.md
@@ -204,10 +206,8 @@ python download_data.py
 # ① 训练前打基线
 python eval_edu.py --stage baseline --max_samples 500
 
-# ② SFT 微调
-python trainer/train_sft.py \
-    --data_paths "dataset/edu_science.parquet,dataset/edu_math_verse.parquet,dataset/edu_math_vista.parquet,dataset/edu_ocr.parquet,dataset/edu_ceval.parquet,dataset/edu_cmmlu.parquet" \
-    --epochs 3 --save_weight edu_sft
+# ② SFT 微调（默认使用全部12个数据集）
+python trainer/train_sft.py --epochs 3 --save_weight edu_sft
 
 # ③ SFT 后评估
 python eval_edu.py --stage sft --model_path out/edu_sft --max_samples 500
@@ -238,7 +238,7 @@ python scripts/web_demo.py --model_path out/edu_grpo
 
 本项目基于 [Apache 2.0](LICENSE) 协议开源。基座模型 Qwen2-VL 遵循其原始协议。
 
-## 🙏 致谢
+## � 致谢
 
 - [MiniMind-V](https://github.com/jingyaogong/minimind-v) — 项目架构参考
 - [Qwen-VL](https://github.com/QwenLM/Qwen-VL) — 基座多模态模型

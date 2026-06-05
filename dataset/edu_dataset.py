@@ -94,10 +94,16 @@ class EduDataset(Dataset):
     def __getitem__(self, index: int):
         row = self.table.slice(index, 1)
         conversations = json.loads(row['conversations'][0].as_py())
-        image_bytes = row['image_bytes'][0].as_py()
 
-        # 预处理图像
-        image = preprocess_image(image_bytes)
+        # 检测是否包含图像数据（根据 conversations 中的 <image> 标记判断）
+        has_image = any("<image>" in turn.get("content", "") for turn in conversations)
+
+        # 纯文本数据用极小的占位图替代真实大图，避免浪费 GPU 内存
+        if has_image:
+            image_bytes = row['image_bytes'][0].as_py()
+            image = preprocess_image(image_bytes)
+        else:
+            image = Image.new("RGB", (8, 8), color=(255, 255, 255))
 
         # 添加 system prompt
         if random.random() < self.add_system_ratio:
