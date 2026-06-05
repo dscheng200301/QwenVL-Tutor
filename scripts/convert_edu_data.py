@@ -2,16 +2,13 @@
 教育数据集格式转换工具
 将多个开源教育数据集统一转换为 QwenSearch 的 Parquet 格式
 
-支持的数据集:
-    - scienceqa: ScienceQA (HuggingFace: derek-thomas/ScienceQA)
-    - mathverse: MathVerse (HuggingFace: AI4Math/MathVerse)
-    - mathvista: MathVista (HuggingFace: AI4Math/MathVista)
-    - ocr_vqa: OCR-VQA (HuggingFace: MMInstruction/OCR-VQA)
-    - tabmwp: TabMWP (HuggingFace: lupantech/TabMWP)
-    - ceval: C-Eval (HuggingFace: ceval/ceval-exam) - 纯文本需截图
-    - geoqa_plus: GeoQA+ (HuggingFace: GeoQA/GeoQA-Plus)
-    - tqa: TQA TextbookQA (HuggingFace: MMInstruction/TQA)
-    - mmmu: MMMU (HuggingFace: MMMU/MMMU)
+支持的数据集（共23个）:
+    图文数学: scienceqa, mathverse, mathvista, tabmwp, math23k, ape210k, geometry3k, clevr_math
+    图文图表: chartqa, dvqa
+    中文综合: ceval, cmmlu, gaokao, geoqa
+    科学常识: ai2d, biology, tqa
+    图文通识: mmmu, ocr_vqa, vizwiz
+    语言理解: race
 
 输出格式:
     Parquet 文件，包含列:
@@ -666,6 +663,332 @@ def convert_biology(output_path, max_samples=None):
     save_parquet(records, output_path)
 
 
+# ============================
+# 新增数据集转换函数
+# ============================
+
+
+def convert_geometry3k(output_path, max_samples=None):
+    """转换 Geometry3K 数据集（几何图文题，含详细解析）"""
+    from datasets import load_dataset
+    print("下载 Geometry3K 数据集...")
+    try:
+        ds = load_dataset("MMInstruction/Geometry3K", split="train", streaming=True)
+    except Exception as e:
+        print(f"Geometry3K 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 Geometry3K"):
+        try:
+            image = item.get('image')
+            if image is None:
+                skipped += 1
+                continue
+            question = item.get('question', '')
+            choices = item.get('choices', [])
+            if choices:
+                question += "\n" + "\n".join(f"{chr(65+i)}. {c}" for i, c in enumerate(choices))
+            answer = item.get('answer', '')
+            solution = item.get('solution', item.get('explanation', item.get('rationale', '')))
+            answer_text = f"答案：{answer}"
+            if solution:
+                answer_text = f"解析：{solution}\n\n{answer_text}"
+            conversations = [
+                {"role": "system", "content": EDU_SYSTEM_PROMPT},
+                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "assistant", "content": answer_text},
+            ]
+            image_bytes = encode_image(image)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"Geometry3K: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_chartqa(output_path, max_samples=None):
+    """转换 ChartQA 数据集（图表问答，柱状图/折线图/饼图）"""
+    from datasets import load_dataset
+    print("下载 ChartQA 数据集...")
+    records = []
+    skipped = 0
+    for name in ["MMInstruction/ChartQA", "iamshnoo/chartqa", "HuggingFaceM4/ChartQA"]:
+        try:
+            ds = load_dataset(name, split="train", streaming=True)
+            break
+        except Exception:
+            ds = None
+    if ds is None:
+        print("ChartQA 所有镜像加载失败，跳过")
+        return
+    for item in tqdm(ds, desc="处理 ChartQA"):
+        try:
+            image = item.get('image') or item.get('img')
+            if image is None:
+                skipped += 1
+                continue
+            question = item.get('question', item.get('query', ''))
+            answer = item.get('answer', item.get('label', ''))
+            if isinstance(answer, list):
+                answer = ', '.join(str(a) for a in answer)
+            answer_text = f"答案：{answer}"
+            conversations = [
+                {"role": "system", "content": "你是一位数据解读老师，请根据图表信息回答问题。"},
+                {"role": "user", "content": f"<image>\n请根据图表回答：{question}"},
+                {"role": "assistant", "content": answer_text},
+            ]
+            image_bytes = encode_image(image)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"ChartQA: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_dvqa(output_path, max_samples=None):
+    """转换 DVQA 数据集（信息图/图表问答）"""
+    from datasets import load_dataset
+    print("下载 DVQA 数据集...")
+    try:
+        ds = load_dataset("MMInstruction/DVQA", split="train", streaming=True)
+    except Exception as e:
+        print(f"DVQA 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 DVQA"):
+        try:
+            image = item.get('image')
+            if image is None:
+                skipped += 1
+                continue
+            question = item.get('question', '')
+            answer = str(item.get('answer', ''))
+            answer_text = f"答案：{answer}"
+            conversations = [
+                {"role": "system", "content": "你是一位信息解读老师，请根据信息图回答问题。"},
+                {"role": "user", "content": f"<image>\n请根据信息图回答：{question}"},
+                {"role": "assistant", "content": answer_text},
+            ]
+            image_bytes = encode_image(image)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"DVQA: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_ai2d(output_path, max_samples=None):
+    """转换 AI2D 数据集（科学示意图，适合亲子科学教育）"""
+    from datasets import load_dataset
+    print("下载 AI2D 数据集...")
+    records = []
+    skipped = 0
+    for name in ["MMInstruction/AI2D", "allenai/AI2D", "alkampfermit/AI2D"]:
+        try:
+            ds = load_dataset(name, split="train", streaming=True)
+            break
+        except Exception:
+            ds = None
+    if ds is None:
+        print("AI2D 所有镜像加载失败，跳过")
+        return
+    for item in tqdm(ds, desc="处理 AI2D"):
+        try:
+            image = item.get('image')
+            if image is None:
+                skipped += 1
+                continue
+            question = item.get('question', '')
+            answer = str(item.get('answer', ''))
+            answer_text = f"答案：{answer}"
+            conversations = [
+                {"role": "system", "content": "你是一位科学老师，请观察示意图帮助孩子理解科学概念。"},
+                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "assistant", "content": answer_text},
+            ]
+            image_bytes = encode_image(image)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"AI2D: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_vizwiz(output_path, max_samples=None):
+    """转换 VizWiz 数据集（真实场景模糊/倾斜图像，提高模型鲁棒性）"""
+    from datasets import load_dataset
+    print("下载 VizWiz 数据集...")
+    try:
+        ds = load_dataset("MMInstruction/VizWiz", split="train", streaming=True)
+    except Exception as e:
+        print(f"VizWiz 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 VizWiz"):
+        try:
+            image = item.get('image')
+            if image is None:
+                skipped += 1
+                continue
+            question = item.get('question', '')
+            answer = item.get('answer', '')
+            if isinstance(answer, list):
+                answer = '; '.join(str(a) for a in answer)
+            answer_text = f"答案：{answer}"
+            conversations = [
+                {"role": "system", "content": EDU_SYSTEM_PROMPT},
+                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "assistant", "content": answer_text},
+            ]
+            image_bytes = encode_image(image)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"VizWiz: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_tqa(output_path, max_samples=None):
+    """转换 TQA (TextbookQA) 数据集（教科书级别图文问答）"""
+    from datasets import load_dataset
+    print("下载 TQA 数据集...")
+    try:
+        ds = load_dataset("MMInstruction/TQA", split="train", streaming=True)
+    except Exception as e:
+        print(f"TQA 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 TQA"):
+        try:
+            image = item.get('image')
+            if image is None:
+                skipped += 1
+                continue
+            question = item.get('question', '')
+            choices = item.get('choices', [])
+            if choices:
+                question += "\n" + "\n".join(f"{chr(65+i)}. {c}" for i, c in enumerate(choices))
+            answer = str(item.get('answer', ''))
+            explanation = item.get('explanation', item.get('rationale', ''))
+            answer_text = f"答案：{answer}"
+            if explanation:
+                answer_text = f"解析：{explanation}\n\n{answer_text}"
+            conversations = [
+                {"role": "system", "content": EDU_SYSTEM_PROMPT},
+                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "assistant", "content": answer_text},
+            ]
+            image_bytes = encode_image(image)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"TQA: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_clevr_math(output_path, max_samples=None):
+    """转换 CLEVR-Math 数据集（合成图数学推理，增强空间/几何推理）"""
+    from datasets import load_dataset
+    print("下载 CLEVR-Math 数据集...")
+    records = []
+    skipped = 0
+    for name in ["MMInstruction/CLEVR-Math", "dali-does/clevr-math"]:
+        try:
+            ds = load_dataset(name, split="train", streaming=True)
+            break
+        except Exception:
+            ds = None
+    if ds is None:
+        print("CLEVR-Math 所有镜像加载失败，跳过")
+        return
+    for item in tqdm(ds, desc="处理 CLEVR-Math"):
+        try:
+            image = item.get('image')
+            if image is None:
+                skipped += 1
+                continue
+            question = item.get('question', '')
+            answer = str(item.get('answer', ''))
+            program = item.get('program', item.get('program_text', ''))
+            answer_text = f"答案：{answer}"
+            if program:
+                answer_text = f"推理过程：{program}\n\n{answer_text}"
+            conversations = [
+                {"role": "system", "content": "你是一位数学思维训练老师，请观察图像中的几何/空间关系，解答问题。"},
+                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "assistant", "content": answer_text},
+            ]
+            image_bytes = encode_image(image)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"CLEVR-Math: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_race(output_path, max_samples=None):
+    """转换 RACE 数据集（中英文阅读理解，纯文本+占位图）"""
+    from datasets import load_dataset
+    print("下载 RACE 数据集...")
+    records = []
+    skipped = 0
+    for name in ["hfl/race", "race/race"]:
+        try:
+            ds = load_dataset(name, "middle", split="train", streaming=True)
+            break
+        except Exception:
+            ds = None
+    if ds is None:
+        try:
+            ds = load_dataset("ehovy/race", "all", split="train", streaming=True)
+        except Exception:
+            print("RACE 加载失败，跳过")
+            return
+    for item in tqdm(ds, desc="处理 RACE"):
+        try:
+            article = item.get('article', '')
+            question = item.get('question', '')
+            options = item.get('options', [])
+            answer = str(item.get('answer', ''))
+            if options:
+                question = f"阅读以下文章，回答问题：\n\n文章：{article[:200]}...\n\n{question}\n" + "\n".join(f"{chr(65+i)}. {o}" for i, o in enumerate(options))
+            else:
+                question = f"阅读以下文章，回答问题：\n\n文章：{article[:200]}...\n\n{question}"
+            answer_text = f"答案：{answer}"
+            placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
+            conversations = [
+                {"role": "system", "content": EDU_SYSTEM_PROMPT},
+                {"role": "user", "content": f"<image>\n{question}"},
+                {"role": "assistant", "content": answer_text},
+            ]
+            image_bytes = encode_image(placeholder)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"RACE: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
 CONVERTERS = {
     'scienceqa': convert_scienceqa,
     'mathverse': convert_mathverse,
@@ -680,6 +1003,14 @@ CONVERTERS = {
     'mmmu': convert_mmmu,
     'geoqa': convert_geoqa,
     'biology': convert_biology,
+    'geometry3k': convert_geometry3k,
+    'chartqa': convert_chartqa,
+    'dvqa': convert_dvqa,
+    'ai2d': convert_ai2d,
+    'vizwiz': convert_vizwiz,
+    'tqa': convert_tqa,
+    'clevr_math': convert_clevr_math,
+    'race': convert_race,
 }
 
 
