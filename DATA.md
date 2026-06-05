@@ -1,19 +1,22 @@
 # QwenSearch 数据集全览
 
-## 数据集清单（9 个已下载，85,729 条）
+## 数据集清单（12 个已下载，106,198 条）
 
 | # | 数据集 | 文件 | 条数 | 语言 | 类型 | 学科 | HF 来源 |
 |---|--------|------|------|------|------|------|----------|
 | 1 | **OCR-VQA** | `edu_ocr.parquet` | 20,000 | EN | 含图 | OCR 文字识别 | `MMInstruction/OCR-VQA` |
 | 2 | **Ape210K** | `edu_ape210k.parquet` | 20,000 | CN | 纯文本 | 小学数学 | `MU-NLPC/Calc-ape210k` |
-| 3 | **CMMLU** | `edu_cmmlu.parquet` | 11,917 | CN | 纯文本 | 67 学科综合 | `haonan-li/CMMLU` |
-| 4 | **ChartQA** | `edu_chartqa.parquet` | 10,000 | EN | 含图 | 图表理解 | `HuggingFaceM4/ChartQA` |
-| 5 | **RACE** | `edu_race.parquet` | 10,000 | CN/EN | 纯文本 | 阅读理解 | `ehovy/race` |
-| 6 | **ScienceQA** | `edu_science.parquet` | 6,218 | EN | 含图 | 全理科 | `derek-thomas/ScienceQA` |
-| 7 | **MathVerse** | `edu_math_verse.parquet` | 3,940 | EN | 含图 | 数学 | `AI4Math/MathVerse` |
-| 8 | **C-Eval** | `edu_ceval.parquet` | 2,654 | CN | 纯文本 | 14 理科 | `ceval/ceval-exam` |
-| 9 | **MathVista** | `edu_math_vista.parquet` | 1,000 | EN | 含图 | 数学 | `AI4Math/MathVista` |
-| | **合计** | | **85,729** | | | | |
+| 3 | **OpenR1-Math CN K12** | `edu_openr1_math.parquet` | 20,000 | CN | 纯文本 | K12 数学 | `Neelectric/OpenR1-Math-cn_k12-91k` |
+| 4 | **CMMLU** | `edu_cmmlu.parquet` | 11,917 | CN | 纯文本 | 67 学科综合 | `haonan-li/CMMLU` |
+| 5 | **ChartQA** | `edu_chartqa.parquet` | 10,000 | EN | 含图 | 图表理解 | `HuggingFaceM4/ChartQA` |
+| 6 | **RACE** | `edu_race.parquet` | 10,000 | CN/EN | 纯文本 | 阅读理解 | `ehovy/race` |
+| 7 | **ScienceQA** | `edu_science.parquet` | 6,218 | EN | 含图 | 全理科 | `derek-thomas/ScienceQA` |
+| 8 | **MathVerse** | `edu_math_verse.parquet` | 3,940 | EN | 含图 | 数学 | `AI4Math/MathVerse` |
+| 9 | **C-Eval** | `edu_ceval.parquet` | 2,654 | CN | 纯文本 | 14 理科 | `ceval/ceval-exam` |
+| 10 | **MathVista** | `edu_math_vista.parquet` | 1,000 | EN | 含图 | 数学 | `AI4Math/MathVista` |
+| 11 | **Gaokao MathQA** | `edu_gaokao_mathqa.parquet` | 351 | CN | 纯文本 | 高考数学 | `hails/agieval-gaokao-mathqa` |
+| 12 | **Gaokao MathCloze** | `edu_gaokao_mathcloze.parquet` | 118 | CN | 纯文本 | 高考数学 | `hails/agieval-gaokao-mathcloze` |
+| | **合计** | | **106,198** | | | | |
 
 ## 磁盘占用
 
@@ -24,11 +27,14 @@
 | `edu_science.parquet` | 160.2 MB | 6,218 |
 | `edu_math_verse.parquet` | 108.8 MB | 3,940 |
 | `edu_math_vista.parquet` | 58.0 MB | 1,000 |
+| `edu_openr1_math.parquet` | 10.7 MB | 20,000 |
 | `edu_ape210k.parquet` | 3.3 MB | 20,000 |
 | `edu_race.parquet` | 2.1 MB | 10,000 |
 | `edu_ceval.parquet` | 0.5 MB | 2,654 |
+| `edu_gaokao_mathqa.parquet` | 0.1 MB | 351 |
 | `edu_cmmlu.parquet` | ~0 MB | 11,917 |
-| **合计** | **~1,666 MB** | **85,729** |
+| `edu_gaokao_mathcloze.parquet` | ~0 MB | 118 |
+| **合计** | **~1,677 MB** | **106,198** |
 
 ## 下载命令
 
@@ -50,7 +56,7 @@ for f in sorted(glob.glob('dataset/edu_*.parquet')):
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                      SFT 阶段 (全量 85,729 条)                     │
+│                      SFT 阶段 (全量 106,198 条)                    │
 │                                                                  │
 │  ┌──────────┐ ┌───────────┐ ┌───────────┐ ┌──────────┐           │
 │  │ScienceQA │ │MathVerse  │ │MathVista  │ │ OCR-VQA  │           │
@@ -63,11 +69,11 @@ for f in sorted(glob.glob('dataset/edu_*.parquet')):
 │  │  2,654   │ │  11,917   │ │ 10,000   │ │ 20,000   │           │
 │  │ 中文理科 │ │ 中文综合  │ │ 图表理解 │ │ 小学数学 │           │
 │  └──────────┘ └───────────┘ └──────────┘ └──────────┘           │
-│  ┌──────────┐                                                    │
-│  │  RACE    │   OCR-VQA 占比 20-30% batch                       │
-│  │ 10,000   │                                                    │
-│  │ 阅读理解 │                                                    │
-│  └──────────┘                                                    │
+│  ┌──────────┐ ┌───────────┐ ┌───────────┐                       │
+│  │  RACE    │ │OpenR1-Math│ │GaokaoMath │  🆕 新增中文数学      │
+│  │ 10,000   │ │  20,000   │ │   469     │  OpenR1 含完整 CoT    │
+│  │ 阅读理解 │ │ 含 CoT    │ │ 高考真题  │                       │
+│  └──────────┘ └───────────┘ └───────────┘                       │
 │                                                                  │
 │  EduDataset → question + answer pairs → cross-entropy loss       │
 └──────────────────────────────────────────────────────────────────┘
@@ -117,3 +123,14 @@ for f in sorted(glob.glob('dataset/edu_*.parquet')):
 │  ⚠️ C-Eval 训练集 ≠ 评估集：训练用了 9 个理科子集，                  │
 │  评估用另外 5 个保留学科，确保评估公正                                │
 └───────────────────────────────────────────────────────────────────┘
+```
+
+## 待补充的数据方向
+
+| 缺口 | 优先级 | 补充方案 |
+|------|--------|----------|
+| 中文图文几何题 | 🔴 高 | GeoQA+ 已定位 `leonardPKU/GEOQA_R1V_Train_8K` |
+| 大学级多模态题 | 🔴 高 | MMMU 已修复 30 学科 config 遍历 |
+| 几何图文解析 | 🟡 中 | Geometry3K 已定位 `hiyouga/geometry3k` |
+| 信息图问答 | 🟡 中 | DVQA 已定位 `DavidNguyen/DVQA` |
+| 中文教材截图 | 🟡 中 | 爬取初高中教材PDF → 截图 → 标注 |
