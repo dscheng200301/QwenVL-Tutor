@@ -340,49 +340,59 @@ python scripts/download_all_data.py --train    # 仅训练集
 python scripts/download_all_data.py --eval     # 仅评估集
 ```
 
-### 4. 打基线 + 训练 + 评估（SFT → GRPO 两阶段）
+### 4. 一站式训练 + 评估 + 优化（SFT → GRPO 两阶段）
 
-> **💡 简化命令**：可使用 `python scripts/eval/edu_evaluate.py all ...` 一键完成 ①②③⑨⑩
+> **💡 推荐**：用一站式脚本完成整个流程
+> 完整流程只需 **5 个命令**（SFT → 评估 → 优化 → GRPO → 最终评估）
 
 ```bash
-# ① 训练前打基线（19 个数据集全量）
-python scripts/eval/eval_edu.py --stage baseline --eval_all --max_samples 200
-
-# ② SFT 微调（默认使用全部 22 个数据集，加权采样）
+# ① SFT 训练（22 个数据集，加权采样）
 python trainer/train_sft.py --epochs 3 --save_weight edu_sft
 
-# ③ SFT 后全量评估（19 个数据集）
-python scripts/eval/eval_edu.py --stage sft --model_path out/edu_sft --eval_all --max_samples 200
+# ② 一站式 SFT 评估（run + meta + report 三合一，自动生成 report.md）
+python scripts/eval/edu_evaluate.py all --stage sft --model_path out/edu_sft --eval_all
 
-# ④ 错误案例分析（可选，定位退化原因）
-python scripts/eval/analyze_errors.py --output_errors errors.json
+# ③ 一站式优化（resample + retrain 两合一，自动使用 v2 平滑公式）
+python scripts/optimize/edu_optimize.py auto --epochs 2 --save_weight edu_sft_v2
 
-# ⑤ 对比 vs 基线（带统计显著性）
-python scripts/eval/compare_evals.py --show_weak_datasets
-
-# ⑥ 生成 GRPO 强化数据（5K 精选）
-python scripts/optimize/build_preference_data.py
-
-# ⑦ GRPO 优化（直接从 SFT 衔接，跳过 DPO）
+# ④ GRPO 训练（直接从 SFT 衔接，跳过 DPO）
 python trainer/train_grpo.py --from_weight ../out/edu_sft --epochs 1
 
-# ⑧ GRPO 后四维评估（基础 + 奖励 + 细粒度 + 退化）
-python scripts/eval/eval_edu.py --stage grpo --model_path out/edu_grpo --max_samples 200
-
-# ⑨ 元评估（检查指标一致性）
-python scripts/eval/meta_evaluation.py --check_consistency
-
-# ⑩ 最终全量评估发布
-python scripts/eval/eval_edu.py --stage full --model_path out/edu_grpo --eval_all --max_samples -1
+# ⑤ 一站式最终评估（run + meta + report + 全量 19 个数据集）
+python scripts/eval/edu_evaluate.py all --stage full --model_path out/edu_grpo --eval_all
 ```
 
-### 5. 训练监控（🆕）
+> **🎯 关键说明**：
+> - `edu_evaluate.py all` = 评估 + 元评估 + 生成报告（三合一）
+> - `edu_optimize.py auto` = 重采样 + 再训练（两合一）
+> - 整个训练 + 评估 + 优化流程只需 **5 个命令**即可完成
+
+### 5. 单独工具（按需使用）
+
+如果想精细控制每一步，可以用单独的命令：
+
+```bash
+# === 评估子命令（scripts/eval/edu_evaluate.py）===
+python scripts/eval/edu_evaluate.py run     --stage baseline --eval_all
+python scripts/eval/edu_evaluate.py run     --stage sft --model_path out/edu_sft --eval_all
+python scripts/eval/edu_evaluate.py compare --show_weak
+python scripts/eval/edu_evaluate.py errors  --output_errors errors.json
+python scripts/eval/edu_evaluate.py meta    --check_consistency
+python scripts/eval/edu_evaluate.py report  --output report.md
+
+# === 优化子命令（scripts/optimize/edu_optimize.py）===
+python scripts/optimize/edu_optimize.py resample --output weights.json
+python scripts/optimize/edu_optimize.py build    --output edu_grpo.parquet
+python scripts/optimize/edu_optimize.py retrain  --data_paths "..." --epochs 2
+```
+
+### 6. 训练监控（🆕）
 
 支持 wandb / SwanLab / TensorBoard / 本地 JSON 自动降级：
 
 ```python
 # 在训练脚本中集成
-from scripts.wandb_integration import TrainingLogger
+from scripts.optimize.wandb_integration import TrainingLogger
 
 logger = TrainingLogger(backend="auto", project="qwensearch", config={...})
 for step, batch in enumerate(dataloader):
@@ -392,35 +402,7 @@ logger.log_artifact("out/edu_sft/pytorch_model.bin", name="model")
 logger.finish()
 ```
 
-### 6. 评估反馈闭环（🆕）
-
-训练 → 评估 → 弱项分析 → 重采样 → 重新训练：
-
-```bash
-# 1. 训练 + 评估（自动保存到 eval_results/）
-python trainer/train_sft.py --epochs 3
-python scripts/eval_edu.py --stage sft --model_path out/edu_sft --eval_all
-
-# 2. 对比 vs 基线 + 弱项识别
-python scripts/compare_evals.py --show_weak_datasets
-
-# 3. 错误案例分析
-python scripts/analyze_errors.py
-
-# 4. 元评估（监控指标可靠性）
-python scripts/meta_evaluation.py --check_consistency
-
-# 5. 生成重采样权重（v2 平滑公式）
-python scripts/resample_data.py --output weights.json
-
-# 6. 用新权重重新训练
-python trainer/train_sft.py --data_paths "..." --epochs 2
-
-# 7. 自动生成评估报告
-python scripts/generate_report.py --output report.md
-```
-
-### 5. Web Demo
+### 7. Web Demo
 
 ```bash
 python scripts/web_demo.py --model_path out/edu_grpo
