@@ -191,6 +191,147 @@ python scripts/optimize/edu_optimize.py {resample|build|retrain|auto} [...]
 python scripts/web_demo.py --model_path out/edu_grpo
 ```
 
+### 6. 评估报告命名（自动带时间 + 效果）
+
+每次评估生成的报告**自动命名**为 `eval_results/{stage}_{YYYYMMDD}_{HHMM}_acc{X.XXXX}.md`：
+
+```
+eval_results/
+├── sft_20260605_1430_acc0.6123.md       # 2026-06-05 14:30 训练后评估，平均准确率 0.6123
+├── grpo_20260605_1530_acc0.6845.md      # GRPO 强化后评估
+├── full_20260606_0900_acc0.6912.md      # 最终发布评估
+└── compare_20260606_1000_acc0.6500.md   # 对比评估
+```
+
+**手动指定**（可选）：
+```bash
+python scripts/eval/edu_evaluate.py report --output my_report.md
+```
+
+> 命名格式：`{阶段}_{年月日}_{时分}_acc{平均准确率}.md`，方便归档和对比
+
+---
+
+## 🖥️ 终端实时可视化
+
+> 训练 / 评估 / 优化过程自动显示**实时进度窗口**：进度条、loss 曲线、GPU 显存、ETA。
+> 无需手动配置，rich 库（已在 `requirements.txt`）默认启用。
+
+### 自动效果
+
+**训练时** 自动显示：
+
+```
+┌─ SFT Training ─────────────────────────────────────┐
+│ ⠋ Training ████████████████░░░░░░░░ 156/200  • 02:30  • ETA 01:00 │
+│                                                     │
+│ 📊 实时指标                                         │
+│   train/loss          1.2345  ↓ -0.0234            │
+│   train/learning_rate  0.0001  → 平稳              │
+│   train/throughput     4.23    ↑ +0.10              │
+│                                                     │
+│ 💻 系统状态                                         │
+│   GPU 0 显存    20.5 / 40.0 GB (51%)              │
+│   已用时        150 秒                             │
+└─────────────────────────────────────────────────────┘
+```
+
+**评估时** 自动显示：
+
+```
+Evaluation 开始，共 19 个数据集
+
+▶ scienceqa (200 样本)
+  [████████████████████░░░░░░] 156/200 (78%) acc=0.6123
+▶ math_vista (150 样本)
+  [██████████████████████░░░] 142/150 (94%) acc=0.5342
+...
+
+✓ Evaluation 完成
+┌─ 评估结果汇总 ─────────────┐
+│ 数据集     准确率   样本数  │
+│ scienceqa  0.6123   200     │
+│ math_vista 0.5342   150     │
+│ ...                        │
+│ 平均       0.5823   —       │
+└────────────────────────────┘
+```
+
+**优化时** 自动显示权重变化柱状图：
+
+```
+Optimization 数据集权重（Top 10）:
+┌──────────────────────┬────────┬──────────────────────┐
+│ 数据集               │ 权重   │ 条形                 │
+│ cmmu                 │ 2.10   │ ████████████████     │
+│ scienceqa            │ 1.85   │ ██████████████       │
+│ ...                  │        │                      │
+└──────────────────────┴────────┴──────────────────────┘
+```
+
+### 关闭（如不需要）
+
+环境变量 `QWENSEARCH_NO_DASHBOARD=1` 即可关闭，回到普通 print 输出：
+
+```bash
+# 训练时关闭
+QWENSEARCH_NO_DASHBOARD=1 python trainer/train_sft.py --epochs 3
+
+# 评估时关闭
+QWENSEARCH_NO_DASHBOARD=1 python scripts/eval/edu_evaluate.py all ...
+```
+
+> 实现位于 [`trainer/terminal_dashboard.py`](trainer/terminal_dashboard.py)，不依赖 wandb，离线运行也可用。
+
+---
+
+## 📈 wandb 训练监控
+
+> 用 wandb 记录训练 / 评估 / 优化全过程的曲线，便于对比和调参。
+> 首次使用需 `wandb login`；国内网络可用 `swanlab` 替代（pip install swanlab）。
+
+### 启用 wandb
+
+```bash
+# 训练时启用
+python trainer/train_sft.py --use_wandb --wandb_project QwenSearch
+python trainer/train_grpo.py --use_wandb --wandb_project QwenSearch
+
+# 通过一站式脚本启用
+python scripts/optimize/edu_optimize.py retrain --use_wandb --epochs 2
+```
+
+### 各阶段要监控的指标
+
+| 阶段 | 关键指标 | 作用 |
+|------|----------|------|
+| **SFT 训练** | `train/loss` / `train/learning_rate` / `train/throughput` / `train/memory_gb` | 训练是否收敛、是否 OOM |
+| **GRPO 训练** | `train/grpo_loss` / `train/reward_mean` / `train/reward_std` / `train/throughput` | 奖励是否提升、分布是否合理 |
+| **评估** | `eval/accuracy_<dataset>` / `eval/avg_reward` | 各数据集表现 + 平均能力 |
+| **优化（重采样）** | `optim/weight_<dataset>` | 弱项数据集权重变化 |
+| **系统** | GPU 利用率 / 显存 / 吞吐 | 性能调优 |
+
+### 推荐曲线对比
+
+1. **训练 vs 验证损失**：SFT 后期应平稳下降，**无过拟合**（训练损失↓，验证损失↑=过拟合）
+2. **GRPO 奖励曲线**：`train/reward_mean` 应稳步上升，`train/reward_std` 不应过大（否则样本间奖励差异大）
+3. **各数据集准确率**：评估后 `eval/accuracy_<dataset>` 曲线，可识别弱项
+
+### 命令速查
+
+```bash
+# 登录 wandb
+wandb login
+
+# 查看训练运行
+wandb sweep / WANDB_PROJECT=QwenSearch wandb graph
+
+# 对比多个 run
+wandb compare --project QwenSearch
+```
+
+> 训练脚本已内置 wandb 集成，启用后无需额外配置。GPU 监控建议用 `nvidia-smi dmon` 或 `wandb` 的 system metrics。
+
 ---
 
 ## 🔒 评估数据集与训练集严格分离

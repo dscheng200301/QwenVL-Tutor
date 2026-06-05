@@ -161,112 +161,34 @@ scripts/optimize/
 
 ```
 trainer/
-├── launch_distributed.py    # 🆕 分布式训练启动器（5 种模式）
-├── train_sft.py             # SFT 训练（支持 --use_deepspeed / --use_fsdp）
-├── train_grpo.py            # GRPO 训练
+├── launch_distributed.py    # 分布式训练启动器（5 种模式）
+├── train_sft.py             # SFT 训练（已集成 DeepSpeed / FSDP）
+├── train_grpo.py            # GRPO 训练（用 model.generate rollout）
 ├── reward_model.py          # EduRewardModel 五维度
 └── trainer_utils.py         # 训练工具（含 DeepSpeed / FSDP 配置生成）
 ```
 
-### 6.4 🆕 分布式训练方案
-
-| 方案 | 显存节省 | 速度 | 适用场景 |
-|------|:--------:|:----:|----------|
-| **DDP** | ❌ 0% | ⭐⭐⭐⭐⭐ | 多卡、模型 ≤ 24GB |
-| **DeepSpeed ZeRO-1** | ⭐⭐ 25% | ⭐⭐⭐⭐ | 优化器分片 |
-| **DeepSpeed ZeRO-2** | ⭐⭐⭐⭐ 60% | ⭐⭐⭐⭐ | **推荐**：显存与速度平衡 |
-| **DeepSpeed ZeRO-3 + Offload** | ⭐⭐⭐⭐⭐ 90% | ⭐⭐⭐ | 极大模型（>7B） |
-| **FSDP** | ⭐⭐⭐⭐ 70% | ⭐⭐⭐ | PyTorch 原生、灵活 |
-| **Accelerate** | 同 DeepSpeed | 同 DeepSpeed | 配置化、跨平台 |
-
-**启动示例**：
-
-```bash
-# 单卡
-python trainer/launch_distributed.py --mode single --epochs 3
-
-# DDP 4 卡
-python trainer/launch_distributed.py --mode ddp --nproc_per_node 4
-
-# DeepSpeed ZeRO-2 4 卡
-python trainer/launch_distributed.py --mode deepspeed --nproc_per_node 4 --zero_stage 2
-
-# DeepSpeed ZeRO-3 + CPU Offload（极致省显存）
-python trainer/launch_distributed.py --mode deepspeed --nproc_per_node 4 --zero_stage 3 --deepspeed_offload 1
-
-# FSDP
-python trainer/launch_distributed.py --mode fsdp --nproc_per_node 4
-```
-
-### 6.5 🆕 vLLM 推理加速
-
-**位置**：`scripts/eval/vllm_inference.py`
-
-```python
-from scripts.eval.vllm_inference import get_inference_backend
-
-backend = get_inference_backend(
-    model_path="./out/edu_sft",
-    base_model_path="./model/Qwen2-VL-2B-Instruct",
-    use_vllm=True,
-    tensor_parallel_size=1,         # 张量并行
-    gpu_memory_utilization=0.85,
-)
-
-# 批量生成
-outputs = backend.generate_batch(
-    prompts=["<image>\n这道题怎么做？"],
-    images=[Image.open("test.jpg")],
-    max_tokens=512,
-)
-
-# GRPO 训练专用（返回 token logprobs）
-results = backend.generate_with_score(prompts, images, max_tokens=512)
-```
-
-**性能对比**（Qwen2-VL-2B, A100 40GB, 200 样本）：
-
-| 后端 | 耗时 | 吞吐 | 加速比 |
-|------|:----:|:----:|:------:|
-| HuggingFace transformers | 12.5 min | 0.27/s | 1.0x |
-| **vLLM** | **42 sec** | **4.76/s** | **17.6x** |
-| vLLM (TP=2) | 24 sec | 8.33/s | 30.9x |
-
-**核心特性**：
-- ✅ Continuous batching（动态批处理）
-- ✅ PagedAttention（显存优化）
-- ✅ Tensor Parallel（多卡推理）
-- ✅ LoRA 热加载（评估时切换多个 LoRA）
-- ✅ 多模态支持（Qwen2-VL 图像+文本）
-- ✅ 自动降级（vLLM 不可用 → HF）
+> 训练时自动检测多卡启用 DDP/DeepSpeed；评估时自动启用 vLLM（不可用时降级 HF）
 
 ---
 
 ## 七、典型工作流
 
-### 7.1 一站式 + 🆕 自动加速（强烈推荐）
+### 7.1 一站式（推荐）
 
 ```bash
-# 训练（自动检测 4 卡 → DeepSpeed ZeRO-2 + 启用 vLLM）
+# 训练（多卡自动启用 DeepSpeed）
 python scripts/optimize/edu_optimize.py auto --epochs 2 --save_weight edu_sft_v2
-# 输出:
-#   自动加速决策
-#     检测到 4 张 GPU（最小显存 40.0 GB）
-#     -> 分布式训练模式: deepspeed (ZeRO-2)
-#     -> vLLM 推理: 已启用（TP=2）
 
-# 评估（自动 vLLM 加速 5-20x）
+# 评估（自动 vLLM 加速）
 python scripts/eval/edu_evaluate.py all --stage sft --model_path out/edu_sft --eval_all
-# 输出:
-#   vLLM 推理决策
-#     检测到 4 张 GPU
-#     vLLM 安装: 是
-#     -> vLLM 推理: 已启用（TP=2）
 
-# 手动覆盖
+# 强制单卡 / 强制 HF
 python scripts/optimize/edu_optimize.py retrain --epochs 2 --no_distributed
 python scripts/eval/edu_evaluate.py run --stage sft --model_path out/edu_sft --no_vllm
 ```
+
+> 加速参数（`--no_distributed` / `--no_vllm` / `--tensor_parallel_size` 等）见 README.md
 
 ### 7.2 单独工具（按需）
 
@@ -320,6 +242,31 @@ python scripts/optimize/edu_optimize.py retrain  --data_paths "..." --epochs 2
 
 ## 九、注意事项
 
+### 报告命名规则
+
+`generate_report.py` 自动生成带**时间戳 + 效果**的报告文件名：
+
+| 字段 | 来源 | 格式 |
+|------|------|------|
+| 阶段 | eval_file["stage"] | sft / grpo / full / baseline |
+| 时间 | `datetime.now()` | YYYYMMDD_HHMM |
+| 效果 | 评估结果的平均准确率 | acc{X.XXXX} |
+
+**示例**：
+```
+eval_results/
+├── sft_20260605_1430_acc0.6123.md
+├── grpo_20260605_1530_acc0.6845.md
+└── full_20260606_0900_acc0.6912.md
+```
+
+**手动指定**（覆盖自动命名）：
+```bash
+python scripts/eval/generate_report.py --eval_file ... --output my_report.md
+```
+
+---
+
 1. **基线必须存在** — 退化检测依赖 `eval_results/baseline.json`
 2. **统计显著性** — 准确率差异 < 2% 通常不显著，需更多样本
 3. **重采样公式版本** — 旧公式 `0.5/score` 已弃用，统一 v2
@@ -330,3 +277,5 @@ python scripts/optimize/edu_optimize.py retrain  --data_paths "..." --epochs 2
    - 一站式入口：`edu_evaluate.py all` + `edu_optimize.py auto`
 6. **路径迁移** — 旧路径 `scripts/eval_edu.py` 已弃用，请改用 `scripts/eval/eval_edu.py`
 7. **评估集与训练集严格分离**（2026-06 修复）— `download_all_data.py` 的 `create_eval_set()` 会从训练集移除评估样本
+8. **vLLM 不用于训练**（2026-06 澄清）— vLLM 是推理引擎（连续批处理 + PagedAttention），不支持 autograd。训练时用 DDP/DeepSpeed/FSDP，评估时用 vLLM
+9. **DeepSpeed 真实集成**（2026-06）— `train_sft.py` 已通过 `ds_engine.backward/step` 真正包装，多卡训练时 `edu_optimize.py` 会自动启用
