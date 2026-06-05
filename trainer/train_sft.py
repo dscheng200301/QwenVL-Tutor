@@ -118,6 +118,13 @@ if __name__ == "__main__":
     parser.add_argument("--use_lora", type=int, default=1, choices=[0, 1], help="是否使用 LoRA")
     parser.add_argument("--use_wandb", action="store_true", help="是否使用 wandb/swanlab")
     parser.add_argument("--wandb_project", type=str, default="QwenSearch-SFT", help="wandb 项目名")
+    # === 分布式训练参数 ===
+    parser.add_argument("--use_deepspeed", type=int, default=0, choices=[0, 1], help="是否使用 DeepSpeed (ZeRO)")
+    parser.add_argument("--deepspeed_zero_stage", type=int, default=2, choices=[1, 2, 3], help="DeepSpeed ZeRO 阶段")
+    parser.add_argument("--deepspeed_offload", type=int, default=0, choices=[0, 1], help="是否启用 CPU offload (ZeRO-2/3)")
+    parser.add_argument("--deepspeed_config", type=str, default=None, help="DeepSpeed 配置文件路径（None 时自动生成）")
+    parser.add_argument("--use_fsdp", type=int, default=0, choices=[0, 1], help="是否使用 FSDP (PyTorch 内置)")
+    parser.add_argument("--gradient_checkpointing", type=int, default=0, choices=[0, 1], help="是否启用梯度检查点（节省显存）")
     args = parser.parse_args()
 
     # ========== 1. 初始化环境 ==========

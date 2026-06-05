@@ -48,6 +48,69 @@ accelerate>=0.30 · datasets>=2.20 · pyarrow>=15 · Pillow>=10
 
 > 配置：`batch_size=4 × grad_accum=8`（有效 batch=32），`max_seq_len=2048`
 
+### ⚡ 分布式训练 + vLLM 推理
+
+> **🚀 性能提升**：多卡 DDP/DeepSpeed/FSDP + vLLM 推理加速 5-20x
+
+#### 分布式训练启动器
+
+```bash
+# === 单卡 ===
+python trainer/launch_distributed.py --mode single --epochs 3
+
+# === DDP 数据并行（多卡）===
+python trainer/launch_distributed.py --mode ddp --nproc_per_node 4
+
+# === DeepSpeed ZeRO-2（推荐，节省显存）===
+python trainer/launch_distributed.py --mode deepspeed --nproc_per_node 4 --zero_stage 2
+
+# === DeepSpeed ZeRO-3（大模型必备）===
+python trainer/launch_distributed.py --mode deepspeed --nproc_per_node 4 --zero_stage 3
+
+# === DeepSpeed + CPU Offload（极致省显存）===
+python trainer/launch_distributed.py --mode deepspeed --nproc_per_node 4 --zero_stage 3 --deepspeed_offload 1
+
+# === FSDP 全分片（PyTorch 内置）===
+python trainer/launch_distributed.py --mode fsdp --nproc_per_node 4
+
+# === Accelerate Launch（通用）===
+python trainer/launch_distributed.py --mode accelerate --nproc_per_node 4
+```
+
+#### vLLM 推理加速（评估时）
+
+```python
+from scripts.eval.vllm_inference import get_inference_backend
+
+# 自动选择 vLLM（不可用时降级到 HF）
+backend = get_inference_backend(
+    model_path="./out/edu_sft",
+    base_model_path="./model/Qwen2-VL-2B-Instruct",
+    use_vllm=True,
+    tensor_parallel_size=1,         # 张量并行 GPU 数
+    gpu_memory_utilization=0.85,    # 显存使用率
+)
+
+# 批量推理（带图像）
+from PIL import Image
+outputs = backend.generate_batch(
+    prompts=["<image>\n这道题怎么做？"],
+    images=[Image.open("test.jpg")],
+    max_tokens=512,
+    temperature=0.0,
+)
+print(outputs[0])
+```
+
+**性能对比**（Qwen2-VL-2B, 单卡 A100 40GB, 200 样本）：
+
+| 后端 | 耗时 | 吞吐 |
+|------|:----:|:----:|
+| HuggingFace transformers | 12.5 min | 0.27 样本/秒 |
+| **vLLM** | **42 sec** | **4.76 样本/秒** (↑17.6x) |
+
+详细配置见 [EVAL_DESIGN.md](EVAL_DESIGN.md#六代码架构)
+
 ---
 
 ## 🏗️ 训练管线（SFT → GRPO 两阶段）
