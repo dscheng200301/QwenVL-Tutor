@@ -1,16 +1,40 @@
 # QwenSearch 数据集全览
 
-## 数据集清单（6 个已下载，共 45,729 条）
+## 数据集清单（23 个支持，~200K+ 条）
 
-| # | 数据集 | 文件 | 条数 | 语言 | 类型 | 学科 | 学段 |
-|---|--------|------|------|------|------|------|------|
-| 1 | **ScienceQA** | `edu_science.parquet` | 6,218 | EN | 含图 | 全理科 | 小学-高中 |
-| 2 | **MathVerse** | `edu_math_verse.parquet` | 3,940 | EN | 含图 | 数学 | 初中-大学 |
-| 3 | **MathVista** | `edu_math_vista.parquet` | 1,000 | EN | 含图 | 数学 | 小学-大学 |
-| 4 | **OCR-VQA** | `edu_ocr.parquet` | 20,000 | EN | 含图 | 文字识别 | 通用 |
-| 5 | **C-Eval** | `edu_ceval.parquet` | 2,654 | CN | 纯文本 | 14个理科 | 初中-大学 |
-| 6 | **CMMLU** | `edu_cmmlu.parquet` | 11,917 | CN | 纯文本 | 67个学科 | 中学-大学 |
-| | **合计** | | **45,729** | | | | |
+### 已下载（6 个，45,729 条）
+
+| # | 数据集 | 文件 | 条数 | 语言 | 类型 | 学科 |
+|---|--------|------|------|------|------|------|
+| 1 | **ScienceQA** | `edu_science.parquet` | 6,218 | EN | 含图 | 全理科 |
+| 2 | **MathVerse** | `edu_math_verse.parquet` | 3,940 | EN | 含图 | 数学 |
+| 3 | **MathVista** | `edu_math_vista.parquet` | 1,000 | EN | 含图 | 数学 |
+| 4 | **OCR-VQA** | `edu_ocr.parquet` | 20,000 | EN | 含图 | 文字识别 |
+| 5 | **C-Eval** | `edu_ceval.parquet` | 2,654 | CN | 纯文本 | 14理科 |
+| 6 | **CMMLU** | `edu_cmmlu.parquet` | 11,917 | CN | 纯文本 | 67学科 |
+| | **合计** | | **45,729** | | | |
+
+### 新增可下载（17 个，~150K+ 条限样）
+
+| # | 数据集 | 文件 | 限样 | 语言 | 含图 | 说明 |
+|---|--------|------|:----:|:----:|:----:|------|
+| 7 | **TabMWP** | `edu_tabmwp.parquet` | 全量38K | EN | ✅ | 表格数学应用题 |
+| 8 | **GAOKAO-Bench** | `edu_gaokao.parquet` | 全量6K | CN | ❌ | 高考真题 |
+| 9 | **Math23K** | `edu_math23k.parquet` | 20K | CN | ❌ | 中文小学数学 |
+| 10 | **Ape210K** | `edu_ape210k.parquet` | 20K | CN | ❌ | 中文小学数学大规模 |
+| 11 | **MMMU** | `edu_mmmu.parquet` | 5K | EN | ✅ | 大学级多模态 |
+| 12 | **GeoQA+** | `edu_geoqa.parquet` | 10K | CN | ✅ | 中文几何 |
+| 13 | **BioVQA** | `edu_biology.parquet` | 5K | EN | ✅ | 生物图文 |
+| 14 | **Geometry3K** | `edu_geometry3k.parquet` | 3K | EN | ✅ | 几何图文解析 |
+| 15 | **ChartQA** | `edu_chartqa.parquet` | 10K | EN | ✅ | 柱状折线饼图 |
+| 16 | **DVQA** | `edu_dvqa.parquet` | 5K | EN | ✅ | 信息图问答 |
+| 17 | **AI2D** | `edu_ai2d.parquet` | 4K | EN | ✅ | 科学示意图 |
+| 18 | **VizWiz** | `edu_vizwiz.parquet` | 5K | EN | ✅ | 真实模糊场景 |
+| 19 | **TQA** | `edu_tqa.parquet` | 5K | EN | ✅ | 教科书图文 |
+| 20 | **CLEVR-Math** | `edu_clevr_math.parquet` | 5K | EN | ✅ | 合成图推理 |
+| 21 | **RACE** | `edu_race.parquet` | 10K | CN/EN | ❌ | 中英文阅读 |
+| 22 | **Ape210K(extra)** | `edu_ape210k_extra.parquet` | — | CN | ❌ | 剩余190K |
+| 23 | **OCR-VQA(extra)** | `edu_ocr_extra.parquet` | — | EN | ✅ | 剩余180K |
 
 ## 各训练阶段使用哪些数据
 
@@ -83,18 +107,20 @@
 ## 下载命令
 
 ```bash
-# 一键下载全部 6 个数据集
+# 一键下载全部 23 个数据集（已有则跳过）
 python download_data.py
 
 # 单个下载示例
-python scripts/convert_edu_data.py --dataset scienceqa --output dataset/edu_science.parquet
-python scripts/convert_edu_data.py --dataset ceval --output dataset/edu_ceval.parquet
+python scripts/convert_edu_data.py --dataset geometry3k --output dataset/edu_geometry3k.parquet
+python scripts/convert_edu_data.py --dataset chartqa --output dataset/edu_chartqa.parquet
+python scripts/convert_edu_data.py --dataset ai2d --output dataset/edu_ai2d.parquet
 
 # 验证数据集
 python -c "
-import pyarrow.parquet as pq, os
-for f in ['dataset/edu_science.parquet','dataset/edu_math_verse.parquet','dataset/edu_math_vista.parquet','dataset/edu_ocr.parquet','dataset/edu_ceval.parquet','dataset/edu_cmmlu.parquet']:
-    print(f'{f}: {pq.ParquetFile(f).metadata.num_rows} 条') if os.path.exists(f) else print(f'{f}: 不存在')
+import pyarrow.parquet as pq, os, glob
+for f in sorted(glob.glob('dataset/edu_*.parquet')):
+    size = os.path.getsize(f) / 1024 / 1024
+    print(f'{f}: {pq.ParquetFile(f).metadata.num_rows:>6} 条 ({size:.1f} MB)')
 "
 ```
 
