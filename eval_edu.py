@@ -606,6 +606,30 @@ def evaluate_all_datasets(model, processor, device, max_samples=200):
             print(f"  ❌ 评估失败: {e}")
 
 
+from datetime import datetime
+
+
+def save_eval_results(results: dict, stage: str, model_path: str):
+    """持久化评估结果到带时间戳的 JSON 文件"""
+    os.makedirs("eval_results", exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"eval_results/{stage}_{timestamp}.json"
+    record = {
+        "timestamp": timestamp,
+        "stage": stage,
+        "model_path": model_path,
+        **results,
+    }
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(record, f, ensure_ascii=False, indent=2)
+    # 同时更新 latest 符号链接（用单独的 JSON 记录最新文件）
+    latest_info = {"stage": stage, "timestamp": timestamp, "file": filename}
+    with open("eval_results/latest.json", 'w', encoding='utf-8') as f:
+        json.dump(latest_info, f, ensure_ascii=False)
+    print(f"\n📁 评估结果已保存: {filename}")
+    return filename
+
+
 # ============================================================================
 # CLI 入口
 # ============================================================================
@@ -658,40 +682,57 @@ if __name__ == "__main__":
         # 保存基线
         os.makedirs("eval_results", exist_ok=True)
         with open(args.baseline_path, 'w', encoding='utf-8') as f:
-            json.dumps(results, f, ensure_ascii=False, indent=2)
+            json.dump(results, f, ensure_ascii=False, indent=2)
         print(f"\n📁 基线已保存: {args.baseline_path}")
+        save_eval_results(results, args.stage, args.model_path)
 
     elif args.stage == "sft":
+        results = {}
         print("\n📋 [1/3] ScienceQA 英文图文评估...")
-        evaluate_scienceqa(model, processor, device, max_s, split="validation")
+        r = evaluate_scienceqa(model, processor, device, max_s, split="validation")
+        results.update(r or {})
         print("\n📋 [2/3] C-Eval 中文理科评估...")
         evaluate_ceval(model, processor, device, min(max_s, 200))
         print("\n📋 [3/3] 自定义数据评估...")
         evaluate_custom(model, processor, device, args.eval_data, min(max_s, 200))
+        save_eval_results(results, args.stage, args.model_path)
 
     elif args.stage == "dpo":
+        results = {}
         print("\n📋 [1/3] ScienceQA 基础能力保持检查...")
-        evaluate_scienceqa(model, processor, device, min(max_s, 50), split="validation")
+        r = evaluate_scienceqa(model, processor, device, min(max_s, 50), split="validation")
+        results.update(r or {})
         print("\n📋 [2/3] DPO 偏好质量评估...")
-        evaluate_dpo_quality(model, processor, device, args.eval_data, min(max_s, 100))
+        gap = evaluate_dpo_quality(model, processor, device, args.eval_data, min(max_s, 100))
+        results["dpo_gap"] = gap
         print("\n📋 [3/3] 退化检测...")
-        evaluate_regression(model, processor, device, args.baseline_path, min(max_s, 50))
+        ok = evaluate_regression(model, processor, device, args.baseline_path, min(max_s, 50))
+        results["regression_safe"] = ok
+        save_eval_results(results, args.stage, args.model_path)
 
     elif args.stage == "grpo":
+        results = {}
         print("\n📋 [1/3] ScienceQA 基础能力保持检查...")
-        evaluate_scienceqa(model, processor, device, min(max_s, 50), split="validation")
+        r = evaluate_scienceqa(model, processor, device, min(max_s, 50), split="validation")
+        results.update(r or {})
         print("\n📋 [2/3] GRPO 奖励质量评估...")
-        evaluate_grpo_reward(model, processor, device, args.eval_data, min(max_s, 100))
+        reward = evaluate_grpo_reward(model, processor, device, args.eval_data, min(max_s, 100))
+        results["grpo_avg_reward"] = reward
         print("\n📋 [3/3] 退化检测...")
-        evaluate_regression(model, processor, device, args.baseline_path, min(max_s, 50))
+        ok = evaluate_regression(model, processor, device, args.baseline_path, min(max_s, 50))
+        results["regression_safe"] = ok
+        save_eval_results(results, args.stage, args.model_path)
 
     elif args.stage == "full":
         # 全量评估：ScienceQA test split + C-Eval holdout
+        results = {}
         print(f"\n🔬 最终发布全量评估 ({args.model_path})")
         print("\n📋 [1/2] ScienceQA test split (全量 holdout)...")
-        evaluate_scienceqa(model, processor, device, max_s, split="test")
+        r = evaluate_scienceqa(model, processor, device, max_s, split="test")
+        results.update(r or {})
         print("\n📋 [2/2] C-Eval holdout 学科...")
         evaluate_ceval(model, processor, device, min(max_s, 500))
+        save_eval_results(results, args.stage, args.model_path)
 
     elif args.stage == "fine":
         print("\n📋 细粒度多维度评估...")
