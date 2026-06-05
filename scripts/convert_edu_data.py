@@ -1009,6 +1009,114 @@ def convert_race(output_path, max_samples=None):
     save_parquet(records, output_path)
 
 
+def convert_openr1_math(output_path, max_samples=None):
+    """转换 OpenR1-Math CN K12 数据集（91K 中文数学推理链）"""
+    from datasets import load_dataset
+    print("下载 OpenR1-Math CN K12 数据集...")
+    try:
+        ds = load_dataset("Neelectric/OpenR1-Math-cn_k12-91k", split="train", streaming=True)
+    except Exception as e:
+        print(f"OpenR1-Math 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 OpenR1-Math"):
+        try:
+            question = item.get('problem', '')
+            solution = item.get('solution', '')
+            answer = item.get('answer', '')
+            answer_text = f"答案：{answer}"
+            if solution:
+                answer_text = f"解析：{solution}\n\n{answer_text}"
+            conversations = [
+                {"role": "system", "content": "你是一位数学辅导老师，请仔细阅读题目，分步解答。请包含：1. 题目分析 2. 解题步骤 3. 最终答案"},
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": answer_text},
+            ]
+            placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
+            image_bytes = encode_image(placeholder)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"OpenR1-Math: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_gaokao_mathqa(output_path, max_samples=None):
+    """转换 AGIEval Gaokao MathQA 数据集（高考数学选择题）"""
+    from datasets import load_dataset
+    print("下载 Gaokao MathQA 数据集...")
+    try:
+        ds = load_dataset("hails/agieval-gaokao-mathqa", split="test", streaming=True)
+    except Exception as e:
+        print(f"Gaokao MathQA 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 Gaokao MathQA"):
+        try:
+            query = item.get('query', '').replace('问题：', '').strip()
+            choices = item.get('choices', [])
+            gold = item.get('gold', [])
+            answer_idx = gold[0] if isinstance(gold, list) and len(gold) > 0 else gold
+            if isinstance(answer_idx, int):
+                answer_letter = chr(65 + answer_idx)
+            else:
+                answer_letter = str(answer_idx)
+            question = query
+            if choices:
+                question += "\n" + "\n".join(f"{chr(65+i)}. {c}" for i, c in enumerate(choices))
+            answer_text = f"答案：{answer_letter}"
+            conversations = [
+                {"role": "system", "content": "你是一位数学辅导老师，请仔细阅读题目，分步解答。请包含：1. 题目分析 2. 解题步骤 3. 最终答案"},
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": answer_text},
+            ]
+            placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
+            image_bytes = encode_image(placeholder)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"Gaokao MathQA: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
+def convert_gaokao_mathcloze(output_path, max_samples=None):
+    """转换 AGIEval Gaokao MathCloze 数据集（高考数学填空题）"""
+    from datasets import load_dataset
+    print("下载 Gaokao MathCloze 数据集...")
+    try:
+        ds = load_dataset("hails/agieval-gaokao-mathcloze", split="test", streaming=True)
+    except Exception as e:
+        print(f"Gaokao MathCloze 加载失败: {e}")
+        return
+    records = []
+    skipped = 0
+    for item in tqdm(ds, desc="处理 Gaokao MathCloze"):
+        try:
+            query = item.get('query', '').replace('问题：', '').strip()
+            answer = str(item.get('answer', ''))
+            answer_text = f"答案：{answer}"
+            conversations = [
+                {"role": "system", "content": "你是一位数学辅导老师，请仔细阅读题目，分步解答。请包含：1. 题目分析 2. 解题步骤 3. 最终答案"},
+                {"role": "user", "content": query},
+                {"role": "assistant", "content": answer_text},
+            ]
+            placeholder = Image.new('RGB', (256, 256), (255, 255, 255))
+            image_bytes = encode_image(placeholder)
+            records.append({'conversations': json.dumps(conversations, ensure_ascii=False), 'image_bytes': image_bytes})
+            if max_samples and len(records) >= max_samples:
+                break
+        except Exception:
+            skipped += 1
+    print(f"Gaokao MathCloze: 成功 {len(records)} 条, 跳过 {skipped} 条")
+    save_parquet(records, output_path)
+
+
 CONVERTERS = {
     'scienceqa': convert_scienceqa,
     'mathverse': convert_mathverse,
@@ -1031,6 +1139,9 @@ CONVERTERS = {
     'tqa': convert_tqa,
     'clevr_math': convert_clevr_math,
     'race': convert_race,
+    'openr1_math': convert_openr1_math,
+    'gaokao_mathqa': convert_gaokao_mathqa,
+    'gaokao_mathcloze': convert_gaokao_mathcloze,
 }
 
 
