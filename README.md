@@ -210,6 +210,115 @@ python scripts/eval/edu_evaluate.py report --output my_report.md
 
 > 命名格式：`{阶段}_{年月日}_{时分}_acc{平均准确率}.md`，方便归档和对比
 
+### 7. GRPO 奖励模型（EduRewardModel）
+
+> **位置**：`trainer/reward_model.py`
+
+GRPO 训练用 **`EduRewardModel`**（规则化奖励，无需训练 NN），五维度评分（总分 0~1）：
+
+| 维度 | 权重 | 计算方法 |
+|------|:----:|----------|
+| 答案准确性 | 0.30 | 关键词匹配 + TF-IDF 语义相似度 + 数值容差 |
+| 步骤完整性 | 0.25 | 解题步骤结构词（"第一步"、"然后"、"所以"等） |
+| 启发式引导 | 0.20 | 引导词检测 - 直接给答案的负面模式 |
+| 语言流畅度 | 0.15 | 中英文表达流畅度 |
+| 格式规范性 | 0.10 | "答案是 X"、"最终答案为 X" 等格式 |
+
+**配套函数**：
+
+- `EduRewardModel.compute_reward(response, gt)` → 单条 reward
+- `EduRewardModel.compute_group_rewards(responses, gt)` → 组内 K 个候选的 rewards
+- `edu_grpo_advantage(rewards)` → 组内标准化优势
+- `edu_grpo_policy_loss(...)` → GRPO 策略损失（含 KL 散度）
+
+**核心设计**：
+
+```python
+# 引导关键词（正面）
+SCAFFOLDING_KEYWORDS = ["观察", "思考", "想一想", "你能发现", ...]
+
+# 直接给答案（负面）
+DIRECT_ANSWER_PATTERNS = [r"^[A-D][\.\)]\s*\n", r"^答案[是为]：?[A-D]", ...]
+
+# 数字同义词映射
+NUMBER_KEYWORDS = {"一": "1", "二": "2", "两": "2", "加倍": "×2", ...}
+```
+
+**特点**：规则化（不训练 NN）、轻量级（TF-IDF 相似度无 GPU 开销）、中文优化、教育领域专用。
+
+> 💡 **质量更高？** 可选用 `LLMRewardModel`（LLM-as-Judge）替代规则模型，支持 API / 本地 vLLM / 混合三种后端。详见 [README §8 LLM-as-Judge 奖励](#8-llm-as-judge-奖励可选)。
+
+### 8. LLM-as-Judge 奖励（可选）
+
+> **位置**：`trainer/llm_reward.py`
+
+如果觉得 `EduRewardModel` 评分质量不够（规则化模型准确率约 70-75%），可使用 LLM-as-Judge 替代（准确率 85-92%）。
+
+#### 4 种后端对比
+
+| 后端 | 成本 | 速度 | 质量 | 硬件 |
+|------|------|------|------|------|
+| `APILLMRewardModel` | 💰💰 | 中 | ⭐⭐⭐⭐⭐ | 任意 |
+| `LocalVLLMRewardModel` | 0（一次性） | ⚡⚡⚡ | ⭐⭐⭐⭐ | 24GB+ 显存 |
+| `LocalHFRewardModel` | 0 | 慢 | ⭐⭐⭐ | 任意 |
+| `HybridLLMRewardModel` | 0/💰 | 中 | ⭐⭐⭐⭐ | 任意 |
+
+#### 使用方式
+
+```python
+from trainer.llm_reward import create_llm_reward
+
+# 自动选择（优先 vLLM > HF > API）
+reward = create_llm_reward(backend="auto")
+
+# 方式 1: API（GPT-4o-mini，约 $3-5/全量训练）
+reward = create_llm_reward(
+    backend="api",
+    api_key=os.environ["OPENAI_API_KEY"],
+    model="gpt-4o-mini",
+)
+
+# 方式 2: 本地 Qwen2.5-72B-AWQ（推荐，0 成本）
+reward = create_llm_reward(
+    backend="vllm",
+    model_path="Qwen/Qwen2.5-72B-Instruct-AWQ",
+    tensor_parallel_size=1,
+)
+
+# 方式 3: 混合（LLM 70% + 规则 20% + 格式 10%，防 reward hacking）
+from trainer.reward_model import EduRewardModel
+reward = create_llm_reward(
+    backend="hybrid",
+    llm_model=create_llm_reward(backend="vllm"),
+    rule_model=EduRewardModel(),
+)
+
+# 替换 train_grpo.py 中的 EduRewardModel
+# reward = EduRewardModel()
+reward = create_llm_reward(backend="hybrid")
+scores = reward.compute_group_rewards(responses, gts, questions)
+```
+
+#### 评分维度（与 EduRewardModel 一致）
+
+| 维度 | 权重 | 说明 |
+|------|:----:|------|
+| 答案准确性 | 0.40 | 与标准答案一致性（LLM 严格比对） |
+| 步骤完整性 | 0.20 | 是否给出清晰步骤 |
+| 启发式引导 | 0.20 | 引导式提问 vs 直接给答案 |
+| 语言流畅度 | 0.10 | 中文表达质量 |
+| 格式规范性 | 0.10 | "答案是 X" 格式 |
+
+#### 实施建议
+
+1. **短期**：先用 `EduRewardModel` 跑通流程（小规模验证）
+2. **中期**：用 `LocalVLLMRewardModel` 替代（成本 0，质量大幅提升）
+3. **长期**：用 `HybridLLMRewardModel`（防 reward hacking，最稳健）
+
+> ⚠️ **GRPO 中 LLM 必须冻结**：训练时只用 LLM 评分，**不能让 LLM 一起更新**，否则 reward 会偏向自己。LLM 在训练中仅作为"评分员"。
+
+> 详见 `trainer/llm_reward.py` 源码（~400 行）。
+
 ---
 
 ## 🖥️ 终端实时可视化
