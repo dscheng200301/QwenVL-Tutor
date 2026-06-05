@@ -124,49 +124,86 @@ def download_dataset(dataset_name, output_path, max_samples=None):
         return False
 
 
-def create_eval_set(train_path, eval_path, eval_ratio=0.05, eval_max_samples=500):
-    """从训练集创建评估集"""
+def create_eval_set(train_path, eval_path, eval_ratio=0.05, eval_max_samples=500,
+                    split_marker_col="split"):
+    """
+    从训练集中**真正分离**评估集（保证训练集和评估集完全不重叠）
+
+    关键修复:
+        原版本只采样写入 eval_path, 训练集仍含评估样本 → 数据泄露
+        新版本: 评估样本从训练集中**彻底移除**, 保证评估有效性
+
+    流程:
+        1. 读取完整训练集
+        2. 随机采样 N 个作为评估集
+        3. 写评估集到 eval_path (含 split='eval' 标记)
+        4. 写剩余训练集到 train_path (不含评估样本, 含 split='train' 标记)
+    """
     import pyarrow.parquet as pq
-    
-    print(f"\n📊 创建评估集: {eval_path}")
+
+    print(f"\n📊 分离评估集: {eval_path}")
     print(f"   训练集: {train_path}")
     print(f"   采样比例: {eval_ratio * 100}%")
     print(f"   最大样本数: {eval_max_samples}")
-    
+
     # 检查文件是否存在
     if not os.path.exists(train_path):
         print(f"❌ 训练集不存在，跳过: {train_path}")
         return False
-    
+
     # 检查评估集是否已存在
     if os.path.exists(eval_path):
         print(f"✅ 评估集已存在，跳过: {eval_path}")
         return True
-    
+
     try:
         # 读取训练集
-        pf = pq.ParquetFile(train_path)
-        total = pf.metadata.num_rows
-        
+        table = pq.read_table(train_path)
+        total = len(table)
+
         # 计算采样数量
         n = min(int(total * eval_ratio), eval_max_samples)
-        n = max(n, 10)  # 至少10个样本
-        
-        print(f"   总样本数: {total}, 采样数: {n}")
-        
-        # 随机采样
-        table = pf.read()
-        indices = sorted(random.sample(range(len(table)), n))
-        eval_table = table.take(indices)
-        
-        # 保存评估集
+        n = max(n, 10)  # 至少 10 个样本
+        n = min(n, total - 10)  # 至少留 10 个给训练
+
+        print(f"   总样本数: {total}, 评估样本数: {n}, 训练样本数: {total - n}")
+
+        # 随机采样（用固定种子保证可复现）
+        all_indices = list(range(total))
+        eval_indices = sorted(random.sample(all_indices, n))
+        train_indices = sorted(set(all_indices) - set(eval_indices))
+
+        # 评估表：含 split 标记
+        eval_table = table.take(eval_indices)
+        if split_marker_col not in eval_table.column_names:
+            # 如果表里没有 split 列，添加
+            import pyarrow as pa
+            split_col = pa.array(["eval"] * len(eval_table), type=pa.string())
+            eval_table = eval_table.append_column(split_marker_col, split_col)
+
+        # 训练表：含 split 标记且**不含评估样本**
+        train_table = table.take(train_indices)
+        if split_marker_col not in train_table.column_names:
+            import pyarrow as pa
+            split_col = pa.array(["train"] * len(train_table), type=pa.string())
+            train_table = train_table.append_column(split_marker_col, split_col)
+
+        # 写评估集
         os.makedirs(os.path.dirname(eval_path), exist_ok=True)
         pq.write_table(eval_table, eval_path)
-        
-        print(f"✅ 成功: {eval_path} ({len(eval_table)} 条)")
+
+        # 写回训练集（不含评估样本）
+        pq.write_table(train_table, train_path)
+
+        print(f"✅ 成功:")
+        print(f"   评估集: {eval_path} ({len(eval_table)} 条)")
+        print(f"   训练集: {train_path} ({len(train_table)} 条, 已移除评估样本)")
+        print(f"   🔒 训练集和评估集已严格分离，无数据泄露")
         return True
     except Exception as e:
-        print(f"❌ 创建评估集失败: {e}")
+        print(f"❌ 分离评估集失败: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 

@@ -270,6 +270,128 @@ qwensearch/
 └── requirements.txt
 ```
 
+## 📋 项目要求
+
+### 🖥️ 硬件要求
+
+| 配置项 | 最低要求 | 推荐配置 | 最佳配置 |
+|--------|---------|---------|---------|
+| **GPU** | NVIDIA RTX 3090 (24GB) | NVIDIA A100 (40GB) | NVIDIA A100 (80GB) / H100 |
+| **显存** | 24 GB | 40 GB | 80 GB |
+| **内存** | 32 GB | 64 GB | 128 GB |
+| **硬盘** | 100 GB SSD | 200 GB NVMe | 500 GB NVMe |
+| **CUDA** | 11.8 | 12.1 | 12.1+ |
+| **网络** | 50 Mbps | 100 Mbps | 500 Mbps+（含学术代理） |
+
+> **⚠️ 关于显存**：
+> - **2B 模型 + LoRA**：24 GB 显存可跑（推荐）
+> - **2B 模型全量微调**：需 40 GB+ 显存
+> - **7B 模型**：至少 40 GB 显存（LoRA）
+
+### 📦 软件依赖
+
+| 依赖 | 版本要求 | 必需/可选 | 说明 |
+|------|---------|:---------:|------|
+| **Python** | 3.10+ | 必需 | 推荐 3.10 |
+| **PyTorch** | 2.4.0+ | 必需 | CUDA 12.1 对应 cu121 |
+| **Transformers** | ≥4.45.0 | 必需 | Qwen2-VL 要求 |
+| **Datasets** | ≥2.20.0 | 必需 | 数据加载 |
+| **PEFT** | ≥0.10.0 | 必需 | LoRA 训练 |
+| **accelerate** | ≥0.30.0 | 必需 | 分布式训练 |
+| **Pillow** | ≥10.0.0 | 必需 | 图像处理 |
+| **pyarrow** | ≥15.0.0 | 必需 | parquet 读写 |
+| **sentencepiece** | ≥0.2.0 | 必需 | tokenizer |
+| **einops** | 最新 | 必需 | 张量操作 |
+| **tiktoken** | 最新 | 必需 | tokenizer |
+| **vLLM** | ≥0.5.0 | 可选 | 推理加速 |
+| **wandb** | 最新 | 可选 | 训练监控 |
+| **swanlab** | 最新 | 可选 | 国产训练监控 |
+| **tensorboard** | 最新 | 可选 | 训练可视化 |
+
+**完整安装**：
+```bash
+# 基础依赖
+pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu121
+pip install transformers>=4.45.0 datasets>=2.20.0 peft>=0.10.0 accelerate>=0.30.0
+pip install Pillow>=10.0.0 pyarrow>=15.0.0 sentencepiece>=0.2.0 einops tiktoken
+
+# 可选依赖
+pip install vllm>=0.5.0 wandb swanlab tensorboard
+```
+
+### ⏱️ 预估时间
+
+| 阶段 | 数据规模 | RTX 3090 (24GB) | A100 (40GB) | A100 (80GB) |
+|------|---------|:---:|:---:|:---:|
+| **数据下载** | 22 个数据集 | ~3-5 小时 | ~3-5 小时 | ~3-5 小时 |
+| **SFT 训练** | ~222K 样本 (3 epochs) | ~36-48 小时 | ~12-18 小时 | ~8-12 小时 |
+| **GRPO 训练** | 5K 精选 (1 epoch) | ~6-10 小时 | ~2-4 小时 | ~1-2 小时 |
+| **全量评估** | 19 个数据集 × 200 | ~3-5 小时 | ~1-2 小时 | ~1 小时 |
+| **报告生成** | - | < 5 分钟 | < 5 分钟 | < 5 分钟 |
+| **总耗时** | 完整流程 | **~50-70 小时** | **~18-28 小时** | **~12-18 小时** |
+
+> **📊 测试配置**：
+> - `batch_size=4, gradient_accumulation=8`（有效 batch=32）
+> - `max_seq_len=2048, learning_rate=1e-4`
+> - 评估 `--max_samples=200/集合`（默认）
+>
+> **⚠️ 注意**：
+> - 数据下载受网络速度影响很大，国内推荐用 ModelScope 镜像
+> - 全量评估 `--eval_all --max_samples -1` 时长会增加 5-10 倍
+> - GRPO 训练强烈推荐 40GB+ 显存
+
+### 🔒 评估数据集与训练集严格分离
+
+**这是机器学习评估的基本原则**：评估集的数据**绝对不能出现在训练集**中。
+
+#### ✅ 实现方式（`download_all_data.py` 中）
+
+1. **训练集先从原始数据集采样**
+2. 然后从训练集中**真正分离**评估样本（不是简单采样）
+3. 写评估集到 `dataset/eval/eval_*.parquet`
+4. **写回训练集**到 `dataset/edu_*.parquet`（已移除评估样本）
+5. 每个样本添加 `split='train'/'eval'` 标记
+
+#### 🔍 验证方式
+
+```bash
+# 检查训练集和评估集是否重叠（应输出 0）
+python -c "
+import pyarrow.parquet as pq
+train = pq.read_table('dataset/edu_science.parquet').to_pylist()
+eval_set = pq.read_table('dataset/eval/eval_science.parquet').to_pylist()
+train_ids = set(r.get('id', r.get('question', '')[:100]) for r in train)
+eval_ids = set(r.get('id', r.get('question', '')[:100]) for r in eval_set)
+overlap = train_ids & eval_ids
+print(f'训练样本数: {len(train_ids)}')
+print(f'评估样本数: {len(eval_ids)}')
+print(f'重叠样本数: {len(overlap)}  (应为 0)')
+"
+```
+
+#### ⚠️ 重要：升级提示
+
+如果你是**从旧版本升级**，训练集中可能仍含评估样本。
+
+**解决方法**（二选一）：
+```bash
+# 方法 1：删除后重新下载（推荐）
+# Windows PowerShell:
+Remove-Item dataset\edu_*.parquet, dataset\eval\eval_*.parquet
+python download_all_data.py
+
+# 方法 2：使用辅助脚本
+python scripts/eval/check_split_integrity.py  # 检测
+python download_all_data.py --force_resplit  # 强制重分离
+```
+
+> 💡 **设计原因**：
+> - 一些数据集（如 OCR-VQA、Ape210K）没有官方的 test split，必须自己划分
+> - 一些数据集（ScienceQA、MathVista）有官方 test split，**优先使用官方 split**（在 `convert_edu_data.py` 中已实现）
+> - 对于无官方 split 的数据集，`create_eval_set()` 函数会做"真分离"（写回训练集时移除评估样本）
+
+---
+
 ## 🚀 快速开始
 
 ### 1. 创建虚拟环境
