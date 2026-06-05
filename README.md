@@ -66,20 +66,19 @@
 | **语言理解** | RACE | CN/EN | 10,000 | ❌ | 中英文阅读理解 | SFT |
 | | **合计** | | **106,198** | | | |
 
-## 📋 评估指标矩阵
+## 📋 评估方法
 
-### 传统分阶段评估
+### 每次训练后应该怎么评估
 
-| 阶段 | 评估命令 | 样本量 | 关键指标 | 绿灯标准 |
-|------|----------|--------|----------|----------|
-| 训练前 | `--stage baseline` | 500+200 | 基座准确率 / 步骤率 | 保存到 `eval_results/baseline.json` |
-| SFT 后 | `--stage sft` | 500+200+200 | 准确率 / 步骤率 / 启发式引导率 | 准确率>50%，步骤率>60% |
-| DPO 后 | `--stage dpo` | 50+100+50 | 偏好gap / 准确率不掉 / 退化检测 | gap>0.05，退化<5% |
-| GRPO 后 | `--stage grpo` | 50+100+50 | avg_reward / 准确率不掉 / 退化检测 | avg_reward>0.5，退化<5% |
-| 细粒度 | `--stage fine` | 100+50 | 五维度雷达评分 | 加权总分>0.5 |
-| 最终发布 | `--stage full` | 4241+500 | 准确率 / 步骤率 | 全量 holdout 最终值 |
+| 训练阶段 | 评估方式 | 命令 | 说明 |
+|----------|----------|------|------|
+| **SFT 训练后** | 全量评估（12 个数据集） | `python eval_edu.py --model_path out/edu_sft --eval_all --max_samples 500` | 在所有 holdout 数据集上评估，观察每个数据集的能力变化 |
+| **DPO 训练后** | 重点检查 3 个核心集 | `--eval_dataset scienceqa` + `--eval_dataset openr1_math` + `--eval_dataset cmmlu` | DPO 只增强偏好对齐，检查基础能力是否退化 |
+| **GRPO 训练后** | 细粒度分析 | `--eval_dataset scienceqa --max_samples 200` | 检查五维度奖励（准确性/完整性/流畅性/引导性/规范性） |
 
-### 多数据集评估（新增）
+**👉 核心原则：训练完每个阶段后，立即运行 `--eval_all` 全量评估，对比前后分数变化，确保新阶段没有破坏已有能力。**
+
+### 12 个评估数据集
 
 | 评估数据集 | 评估命令 | 条数 | 评估指标 |
 |-----------|----------|------|----------|
@@ -95,14 +94,6 @@
 | RACE | `--eval_dataset race` | 1,000 | 选项匹配率 |
 | Gaokao MathQA | `--eval_dataset gaokao_mathqa` | 351 | 选项匹配率 |
 | Gaokao MathCloze | `--eval_dataset gaokao_mathcloze` | 118 | 数值匹配率 |
-
-```bash
-# 评估单个数据集
-python eval_edu.py --model_path out/edu_sft --eval_dataset openr1_math --max_samples 500
-
-# 一键评估所有 12 个数据集
-python eval_edu.py --model_path out/edu_sft --eval_all --max_samples 200
-```
 
 ### 评估指标说明
 
