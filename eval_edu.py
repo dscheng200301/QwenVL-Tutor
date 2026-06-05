@@ -557,6 +557,55 @@ def evaluate_fine_grained(model, processor, device, data_path, max_samples=100):
     print("=" * 60)
 
 
+# 评估数据集注册表
+EVAL_DATASETS = {
+    'scienceqa': 'dataset/eval/eval_science.parquet',
+    'ceval': None,  # 特殊处理：从 HF 动态加载
+    'ape210k': 'dataset/eval/eval_ape210k.parquet',
+    'chartqa': 'dataset/eval/eval_chartqa.parquet',
+    'cmmlu': 'dataset/eval/eval_cmmlu.parquet',
+    'math_verse': 'dataset/eval/eval_math_verse.parquet',
+    'math_vista': 'dataset/eval/eval_math_vista.parquet',
+    'ocr': 'dataset/eval/eval_ocr.parquet',
+    'openr1_math': 'dataset/eval/eval_openr1_math.parquet',
+    'race': 'dataset/eval/eval_race.parquet',
+    'gaokao_mathqa': 'dataset/eval/eval_gaokao_mathqa.parquet',
+    'gaokao_mathcloze': 'dataset/eval/eval_gaokao_mathcloze.parquet',
+}
+
+
+def evaluate_dataset(model, processor, device, dataset_name, max_samples=200):
+    """根据数据集名称选择对应的评估函数"""
+    if dataset_name == 'ceval':
+        return evaluate_ceval(model, processor, device, max_samples)
+    
+    data_path = EVAL_DATASETS.get(dataset_name)
+    if data_path and os.path.exists(data_path):
+        evaluate_custom(model, processor, device, data_path, max_samples)
+    else:
+        print(f"⚠️ 评估数据集不存在: {dataset_name} -> {data_path}")
+
+
+def evaluate_all_datasets(model, processor, device, max_samples=200):
+    """对所有已注册的评估数据集进行评估"""
+    results = {}
+    for name in sorted(EVAL_DATASETS.keys()):
+        print(f"\n{'='*60}")
+        print(f"📊 评估数据集: {name}")
+        print(f"{'='*60}")
+        try:
+            if name == 'ceval':
+                evaluate_ceval(model, processor, device, max_samples)
+            else:
+                path = EVAL_DATASETS[name]
+                if path and os.path.exists(path):
+                    evaluate_custom(model, processor, device, path, max_samples)
+                else:
+                    print(f"  跳过（数据文件不存在）")
+        except Exception as e:
+            print(f"  ❌ 评估失败: {e}")
+
+
 # ============================================================================
 # CLI 入口
 # ============================================================================
@@ -567,7 +616,11 @@ if __name__ == "__main__":
     parser.add_argument("--stage", type=str, default="sft",
                         choices=["baseline", "sft", "dpo", "grpo", "full", "fine"],
                         help="评估阶段")
-    parser.add_argument("--eval_data", type=str, default="dataset/edu_science.parquet", help="评估数据路径")
+    parser.add_argument("--eval_data", type=str, default="dataset/edu_science.parquet", help="评估数据路径（传统用法）")
+    parser.add_argument("--eval_dataset", type=str, default=None,
+                        choices=list(EVAL_DATASETS.keys()),
+                        help="评估单个数据集（新增）")
+    parser.add_argument("--eval_all", action="store_true", help="评估所有已注册数据集（新增）")
     parser.add_argument("--max_samples", type=int, default=200, help="最大评估样本数（-1=全量）")
     parser.add_argument("--baseline_path", type=str, default="eval_results/baseline.json", help="退化检测基线文件路径")
     args = parser.parse_args()
@@ -578,6 +631,20 @@ if __name__ == "__main__":
     model, device = load_model(args.model_path, args.base_model)
     processor = model.processor
     max_s = args.max_samples if args.max_samples > 0 else 99999
+
+    # 新增：单独评估某个数据集
+    if args.eval_dataset:
+        print(f"🎯 单独评估: {args.eval_dataset}")
+        evaluate_dataset(model, processor, device, args.eval_dataset, max_s)
+        print(f"\n🏁 评估完成！")
+        exit(0)
+    
+    # 新增：评估所有数据集
+    if args.eval_all:
+        print(f"🎯 全量评估所有 {len(EVAL_DATASETS)} 个数据集")
+        evaluate_all_datasets(model, processor, device, max_s)
+        print(f"\n🏁 全量评估完成！")
+        exit(0)
 
     if args.stage == "baseline":
         # 基座评估 + 保存基线
@@ -591,7 +658,7 @@ if __name__ == "__main__":
         # 保存基线
         os.makedirs("eval_results", exist_ok=True)
         with open(args.baseline_path, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
+            json.dumps(results, f, ensure_ascii=False, indent=2)
         print(f"\n📁 基线已保存: {args.baseline_path}")
 
     elif args.stage == "sft":
