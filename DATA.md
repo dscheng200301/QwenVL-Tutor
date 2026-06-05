@@ -101,29 +101,47 @@ for f in sorted(glob.glob('dataset/edu_*.parquet')):
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-## 评估用哪些数据（与训练数据隔离）
+## 评估数据集（12 个 holdout，与训练数据隔离）
 
+| # | 评估数据集 | 文件 | 条数 | 来源 | 评估指标 |
+|---|-----------|------|------|------|----------|
+| 1 | **ScienceQA** | `eval/eval_science.parquet` | 932 | 训练集 15% holdout | 答案准确率 + 步骤完整率 |
+| 2 | **C-Eval** | HF 动态加载 | 500 | 5 个保留学科 | 选项匹配率 |
+| 3 | **OCR-VQA** | `eval/eval_ocr.parquet` | 1,000 | 训练集 15% holdout | 关键词匹配率 |
+| 4 | **Ape210K** | `eval/eval_ape210k.parquet` | 1,000 | 训练集 15% holdout | 关键词匹配率 |
+| 5 | **OpenR1-Math** | `eval/eval_openr1_math.parquet` | 1,000 | 训练集 15% holdout | 关键词匹配率 + 步骤完整率 |
+| 6 | **ChartQA** | `eval/eval_chartqa.parquet` | 1,000 | 训练集 15% holdout | 答案匹配率 |
+| 7 | **CMMLU** | `eval/eval_cmmlu.parquet` | 1,000 | 训练集 15% holdout | 选项匹配率 |
+| 8 | **MathVerse** | `eval/eval_math_verse.parquet` | 591 | 训练集 15% holdout | 关键词匹配率 |
+| 9 | **MathVista** | `eval/eval_math_vista.parquet` | 150 | 训练集 15% holdout | 答案匹配率 |
+| 10 | **RACE** | `eval/eval_race.parquet` | 1,000 | 训练集 15% holdout | 选项匹配率 |
+| 11 | **Gaokao MathQA** | `eval/eval_gaokao_mathqa.parquet` | 351 | 全量 holdout | 选项匹配率 |
+| 12 | **Gaokao MathCloze** | `eval/eval_gaokao_mathcloze.parquet` | 118 | 全量 holdout | 数值匹配率 |
+
+### 评估命令
+
+```bash
+# 评估单个数据集
+python eval_edu.py --model_path out/edu_sft --eval_dataset openr1_math --max_samples 500
+python eval_edu.py --model_path out/edu_sft --eval_dataset chartqa --max_samples 200
+
+# 一键评估所有数据集
+python eval_edu.py --model_path out/edu_sft --eval_all --max_samples 200
+
+# 传统分阶段评估（兼容原有流程）
+python eval_edu.py --stage sft   # ScienceQA + C-Eval + 自定义
+python eval_edu.py --stage full  # 全量最终评估
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                          评估测试集                                │
-│                                                                   │
-│  ┌─────────────────────┐  ┌──────────────────────────────────┐    │
-│  │  ScienceQA test     │  │  C-Eval holdout (5个保留学科)     │    │
-│  │  test split 4,241   │  │  high_school_math/physics         │    │
-│  │  ⚠️ 仅 --stage full  │  │  college_physics/programming      │    │
-│  │  使用（最终holdout） │  │  discrete_math                   │    │
-│  └─────────────────────┘  └──────────────────────────────────┘    │
-│                                                                   │
-│  ┌─────────────────────┐  ┌──────────────────────────────────┐    │
-│  │  ScienceQA val      │  │  自定义 Parquet 数据              │    │
-│  │  validation 4,241   │  │  本地 edu_science.parquet         │    │
-│  │  日常迭代使用 500    │  │  日常迭代使用 200                 │    │
-│  └─────────────────────┘  └──────────────────────────────────┘    │
-│                                                                   │
-│  ⚠️ C-Eval 训练集 ≠ 评估集：训练用了 9 个理科子集，                  │
-│  评估用另外 5 个保留学科，确保评估公正                                │
-└───────────────────────────────────────────────────────────────────┘
-```
+
+### 评估指标说明
+
+| 指标 | 计算方法 | 适用数据集 |
+|------|----------|-----------|
+| **答案准确率** | 检查模型回复中是否包含正确答案 | ScienceQA, MathVista, Gaokao |
+| **选项匹配率** | 检查答案选项字母是否出现 | C-Eval, CMMLU, RACE |
+| **关键词匹配率** | GT 答案中关键词与回复的交集比率 | OCR-VQA, Ape210K, MathVerse, OpenR1-Math |
+| **步骤完整率** | 回复中是否包含分步推理关键词 | 所有图文数学数据集 |
+| **启发式引导率** | 回复中是否包含引导性语言 | 亲子教育场景评估 |
 
 ## 待补充的数据方向
 
