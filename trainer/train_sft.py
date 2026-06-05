@@ -27,9 +27,20 @@ from trainer.trainer_utils import (
 warnings.filterwarnings('ignore')
 
 
-def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
+def train_epoch(epoch, loader, iters, start_step=0, wandb=None, ds_engine=None, fsdp_model=None):
+    """
+    训练一个 epoch
+
+    Args:
+        ds_engine: DeepSpeed engine（如果 use_deepspeed=1）
+        fsdp_model: FSDP 包装后的模型（如果 use_fsdp=1）
+    """
     start_time = time.time()
     last_step = start_step
+    use_ds = ds_engine is not None
+    use_fsdp = fsdp_model is not None
+    # DeepSpeed / FSDP 自己处理混合精度和梯度累积
+    use_scaler = scaler is not None and not use_ds
 
     for step, (input_ids, attention_mask, labels, pixel_values, image_grid_thw) in enumerate(loader, start=start_step + 1):
         input_ids = input_ids.to(args.device)
@@ -43,8 +54,9 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
-        with autocast_ctx:
-            outputs = model(
+        # DeepSpeed 用 bfloat16/fp16 上下文，HF 用 autocast
+        if use_ds:
+            outputs = ds_engine(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 pixel_values=pixel_values,
@@ -55,20 +67,56 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
             if loss is None:
                 continue
             loss = loss / args.accumulation_steps
+            ds_engine.backward(loss)
+        else:
+            with autocast_ctx:
+                if use_fsdp:
+                    outputs = fsdp_model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        pixel_values=pixel_values,
+                        image_grid_thw=image_grid_thw,
+                        labels=labels,
+                    )
+                else:
+                    outputs = model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        pixel_values=pixel_values,
+                        image_grid_thw=image_grid_thw,
+                        labels=labels,
+                    )
+                loss = outputs.loss
+                if loss is None:
+                    continue
+                loss = loss / args.accumulation_steps
 
-        scaler.scale(loss).backward()
+            if use_scaler:
+                scaler.scale(loss).backward()
+            else:
+                loss.backward()
 
         if step % args.accumulation_steps == 0:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
-            scaler.step(optimizer)
-            scaler.update()
-            optimizer.zero_grad(set_to_none=True)
+            if use_ds:
+                ds_engine.step()  # DeepSpeed 自带梯度裁剪
+            else:
+                if use_scaler:
+                    scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(
+                    model.parameters() if not use_fsdp else fsdp_model.parameters(),
+                    args.grad_clip,
+                )
+                if use_scaler:
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
 
         if step % args.log_interval == 0 or step == iters:
             spend_time = time.time() - start_time
             current_loss = loss.item() * args.accumulation_steps
-            current_lr = optimizer.param_groups[-1]['lr']
+            current_lr = optimizer.param_groups[-1]['lr'] if not use_ds else ds_engine.get_lr()[0]
             eta_min = spend_time / max(step - start_step, 1) * (iters - step) // 60
             Logger(f'[SFT] Epoch:[{epoch + 1}/{args.epochs}]({step}/{iters}), '
                    f'loss:{current_loss:.4f}, lr:{current_lr:.8f}, eta:{eta_min:.1f}min')
@@ -81,20 +129,56 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
         if (step % args.save_interval == 0 or step == iters) and is_main_process():
             ckp = os.path.join(args.save_dir, f'{args.save_weight}')
             os.makedirs(ckp, exist_ok=True)
-            model.save_pretrained(ckp)
+            if use_ds:
+                # DeepSpeed 保存（仅主进程）
+                ds_engine.save_checkpoint(ckp)
+            else:
+                model.save_pretrained(ckp)
             Logger(f'[SFT] Model saved to {ckp}')
 
         del input_ids, attention_mask, labels, pixel_values, image_grid_thw, outputs, loss
 
     if last_step > start_step and last_step % args.accumulation_steps != 0:
-        scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
-        scaler.step(optimizer)
-        scaler.update()
-        optimizer.zero_grad(set_to_none=True)
+        if not use_ds:
+            if use_scaler:
+                scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters() if not use_fsdp else fsdp_model.parameters(),
+                args.grad_clip,
+            )
+            if use_scaler:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
 
 
 if __name__ == "__main__":
+    # ========== 🆕 自动分布式检测 ==========
+    # 多卡 + 未启动分布式 + 用户未禁用 → 自动 fork 到 torchrun
+    rank = int(os.environ.get("RANK", -1))
+    n_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    no_auto = "--no_auto_distributed" in sys.argv
+    use_ds = "--use_deepspeed" in sys.argv
+    use_fsdp = "--use_fsdp" in sys.argv
+
+    if n_gpus > 1 and rank == -1 and not no_auto and not use_ds and not use_fsdp:
+        import subprocess
+        master_port = str(29500 + int(__import__('time').time()) % 1000)
+        cmd = [
+            "torchrun",
+            f"--nproc_per_node={n_gpus}",
+            f"--master_port={master_port}",
+            os.path.abspath(__file__),
+        ] + sys.argv[1:]
+        print(f"\n{'=' * 70}")
+        print(f"[AUTO-DDP] 检测到 {n_gpus} 张 GPU，自动启用 DDP")
+        print(f"[AUTO-DDP] 重启到: torchrun --nproc_per_node={n_gpus} --master_port={master_port}")
+        print(f"{'=' * 70}\n")
+        sys.exit(subprocess.run(cmd, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).returncode)
+
+    # 显式添加 no_auto_distributed 参数（用于接收 fork 后的额外参数）
     parser = argparse.ArgumentParser(description="QwenSearch SFT Training")
     parser.add_argument("--model_name", type=str, default="./model/Qwen2-VL-2B-Instruct", help="基座模型路径")
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
@@ -125,6 +209,8 @@ if __name__ == "__main__":
     parser.add_argument("--deepspeed_config", type=str, default=None, help="DeepSpeed 配置文件路径（None 时自动生成）")
     parser.add_argument("--use_fsdp", type=int, default=0, choices=[0, 1], help="是否使用 FSDP (PyTorch 内置)")
     parser.add_argument("--gradient_checkpointing", type=int, default=0, choices=[0, 1], help="是否启用梯度检查点（节省显存）")
+    parser.add_argument("--no_auto_distributed", action="store_true",
+                        help="关闭自动 DDP 检测（多卡时也不自动 fork 到 torchrun）")
     args = parser.parse_args()
 
     # ========== 1. 初始化环境 ==========
@@ -160,6 +246,53 @@ if __name__ == "__main__":
     model = QwenSearchVLM(config)
     model = model.to(args.device)
     get_model_params(model)
+
+    # ========== 5.5 分布式包装：DeepSpeed / FSDP ==========
+    ds_engine = None
+    fsdp_model = None
+    optimizer = None  # DeepSpeed 模式下会在后面创建
+
+    if args.use_deepspeed:
+        Logger(f'[SFT] 🆕 启用 DeepSpeed ZeRO-{args.deepspeed_zero_stage}')
+        from trainer.trainer_utils import generate_deepspeed_config, wrap_model_with_deepspeed
+        ds_config_path = args.deepspeed_config or generate_deepspeed_config(
+            zero_stage=args.deepspeed_zero_stage,
+            offload=bool(args.deepspeed_offload),
+            bf16=(args.dtype == 'bfloat16'),
+        )
+        # 先创建 optimizer
+        optimizer = optim.AdamW(
+            filter(lambda p: p.requires_grad, model.parameters()),
+            lr=args.learning_rate,
+        )
+        ds_engine, optimizer, _ = wrap_model_with_deepspeed(
+            model=model,
+            optimizer=optimizer,
+            deepspeed_config_path=ds_config_path,
+        )
+        Logger(f'[SFT] DeepSpeed engine 已创建（ZeRO-{args.deepspeed_zero_stage}）')
+    elif args.use_fsdp:
+        Logger(f'[SFT] 🆕 启用 FSDP（PyTorch 内置）')
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+        from torch.distributed.fsdp import MixedPrecision
+        from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
+
+        # FSDP 自动包装策略（按 transformer 层分片）
+        mp_policy = MixedPrecision(
+            param_dtype=torch.bfloat16 if args.dtype == 'bfloat16' else torch.float16,
+            reduce_dtype=torch.bfloat16 if args.dtype == 'bfloat16' else torch.float16,
+            buffer_dtype=torch.bfloat16 if args.dtype == 'bfloat16' else torch.float16,
+        )
+        fsdp_model = FSDP(
+            model,
+            mixed_precision=mp_policy,
+            sharding_strategy={"FULL_SHARD": 0, "SHARD_GRAD_OP": 1, "NO_SHARD": 2}.get("FULL_SHARD", 0),
+            device_id=torch.cuda.current_device(),
+        )
+        if args.gradient_checkpointing:
+            fsdp_model.gradient_checkpointing_enable()
+            Logger(f'[SFT] FSDP 梯度检查点已启用')
+        Logger(f'[SFT] FSDP 模型包装完成')
 
     # ========== 6. 加载数据 ==========
     data_paths = args.data_paths.split(",")
@@ -206,11 +339,13 @@ if __name__ == "__main__":
     train_sampler = weighted_sampler if len(all_datasets) > 1 else (DistributedSampler(train_ds) if dist.is_initialized() else None)
 
     # ========== 7. 优化器 ==========
-    scaler = torch.cuda.amp.GradScaler(enabled=(args.dtype == 'float16'))
-    optimizer = optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=args.learning_rate,
-    )
+    # DeepSpeed 模式下 optimizer 已在 5.5 步创建
+    scaler = torch.cuda.amp.GradScaler(enabled=(args.dtype == 'float16' and ds_engine is None))
+    if optimizer is None:
+        optimizer = optim.AdamW(
+            filter(lambda p: p.requires_grad, model.parameters()),
+            lr=args.learning_rate,
+        )
 
     # ========== 8. 开始训练 ==========
     for epoch in range(args.epochs):
@@ -226,7 +361,8 @@ if __name__ == "__main__":
             pin_memory=True,
             collate_fn=edu_sft_collate_fn,
         )
-        train_epoch(epoch, loader, len(loader), 0, wandb)
+        train_epoch(epoch, loader, len(loader), 0, wandb,
+                    ds_engine=ds_engine, fsdp_model=fsdp_model)
 
     # ========== 9. 最终保存 ==========
     if is_main_process():

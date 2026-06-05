@@ -33,10 +33,22 @@
 
 ### 📦 核心依赖
 
+```bash
+pip install -r requirements.txt
 ```
-Python 3.10+ · PyTorch 2.4+ · transformers>=4.45 · peft>=0.10
-accelerate>=0.30 · datasets>=2.20 · pyarrow>=15 · Pillow>=10
-```
+
+**完整依赖**见 [`requirements.txt`](requirements.txt)，含：
+
+| 类别 | 包 |
+|------|---|
+| 核心 ML | torch, transformers, accelerate, peft |
+| 数据 | datasets, pyarrow, Pillow, numpy |
+| 分布式训练（可选） | deepspeed |
+| 推理加速（可选） | vllm |
+| 监控 | wandb, swanlab |
+| 演示 | gradio |
+
+> vLLM 不可用时 `edu_evaluate.py` 会自动降级到 HuggingFace transformers
 
 ### ⏱️ 预估时间（完整流程）
 
@@ -47,95 +59,6 @@ accelerate>=0.30 · datasets>=2.20 · pyarrow>=15 · Pillow>=10
 | A100 80GB | 8-12 h | 1-2 h | 1 h | **12-18 h** |
 
 > 配置：`batch_size=4 × grad_accum=8`（有效 batch=32），`max_seq_len=2048`
-
-### ⚡ 分布式训练 + vLLM 推理
-
-> **🚀 性能提升**：多卡 DDP/DeepSpeed/FSDP + vLLM 推理加速 5-20x
-
-#### 🆕 零配置自动加速（一站式脚本默认启用）
-
-```bash
-# 训练：自动检测 GPU 数量 → DeepSpeed ZeRO-2/3
-python scripts/optimize/edu_optimize.py auto --epochs 2 --save_weight edu_sft_v2
-# 输出:
-#   自动加速决策
-#   ===============
-#     检测到 4 张 GPU（最小显存 40.0 GB）
-#     -> 分布式训练模式: deepspeed (ZeRO-2)
-#     -> vLLM 推理: 已启用（TP=2）
-
-# 评估：自动检测 vLLM 可用性 → TP 自动推荐
-python scripts/eval/edu_evaluate.py all --stage sft --model_path out/edu_sft --eval_all
-# 输出:
-#   vLLM 推理决策
-#   ===============
-#     检测到 4 张 GPU
-#     vLLM 安装: 是
-#     -> vLLM 推理: 已启用（TP=2）
-
-# 手动覆盖
-python scripts/optimize/edu_optimize.py retrain --epochs 2 --no_distributed
-python scripts/eval/edu_evaluate.py run --stage sft --model_path out/edu_sft --no_vllm
-```
-
-#### 手动分布式训练启动器
-
-```bash
-# === 单卡 ===
-python trainer/launch_distributed.py --mode single --epochs 3
-
-# === DDP 数据并行（多卡）===
-python trainer/launch_distributed.py --mode ddp --nproc_per_node 4
-
-# === DeepSpeed ZeRO-2（推荐，节省显存）===
-python trainer/launch_distributed.py --mode deepspeed --nproc_per_node 4 --zero_stage 2
-
-# === DeepSpeed ZeRO-3（大模型必备）===
-python trainer/launch_distributed.py --mode deepspeed --nproc_per_node 4 --zero_stage 3
-
-# === DeepSpeed + CPU Offload（极致省显存）===
-python trainer/launch_distributed.py --mode deepspeed --nproc_per_node 4 --zero_stage 3 --deepspeed_offload 1
-
-# === FSDP 全分片（PyTorch 内置）===
-python trainer/launch_distributed.py --mode fsdp --nproc_per_node 4
-
-# === Accelerate Launch（通用）===
-python trainer/launch_distributed.py --mode accelerate --nproc_per_node 4
-```
-
-#### vLLM 推理加速（评估时）
-
-```python
-from scripts.eval.vllm_inference import get_inference_backend
-
-# 自动选择 vLLM（不可用时降级到 HF）
-backend = get_inference_backend(
-    model_path="./out/edu_sft",
-    base_model_path="./model/Qwen2-VL-2B-Instruct",
-    use_vllm=True,
-    tensor_parallel_size=1,         # 张量并行 GPU 数
-    gpu_memory_utilization=0.85,    # 显存使用率
-)
-
-# 批量推理（带图像）
-from PIL import Image
-outputs = backend.generate_batch(
-    prompts=["<image>\n这道题怎么做？"],
-    images=[Image.open("test.jpg")],
-    max_tokens=512,
-    temperature=0.0,
-)
-print(outputs[0])
-```
-
-**性能对比**（Qwen2-VL-2B, 单卡 A100 40GB, 200 样本）：
-
-| 后端 | 耗时 | 吞吐 |
-|------|:----:|:----:|
-| HuggingFace transformers | 12.5 min | 0.27 样本/秒 |
-| **vLLM** | **42 sec** | **4.76 样本/秒** (↑17.6x) |
-
-详细配置见 [EVAL_DESIGN.md](EVAL_DESIGN.md#六代码架构)
 
 ---
 
@@ -236,16 +159,16 @@ python download_all_data.py    # 一键下载 22 训练 + 19 评估
 
 ### 4. 训练 + 评估 + 优化（一站式 5 步）
 
-> **🆕 零配置自动加速**：`edu_optimize.py` 自动检测 GPU 数量启用 DeepSpeed，`edu_evaluate.py` 自动启用 vLLM
+> **🆕 自动加速**：以下命令都默认自动检测 GPU 数量，多卡时自动启用 DDP/DeepSpeed，单卡直接训练
 
 ```bash
-# ① SFT 训练
+# ① SFT 训练（多卡自动 DDP，单卡直接跑）
 python trainer/train_sft.py --epochs 3 --save_weight edu_sft
 
-# ② 一站式 SFT 评估（🆕 自动 vLLM 加速）
+# ② 一站式 SFT 评估（自动 vLLM 加速）
 python scripts/eval/edu_evaluate.py all --stage sft --model_path out/edu_sft --eval_all
 
-# ③ 一站式优化（🆕 自动检测 4 卡 → DeepSpeed ZeRO-2）
+# ③ 一站式优化（多卡自动启用 DeepSpeed）
 python scripts/optimize/edu_optimize.py auto --epochs 2 --save_weight edu_sft_v2
 
 # ④ GRPO 训练（直接从 SFT 衔接）
