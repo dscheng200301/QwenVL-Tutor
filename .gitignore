@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Model weights
+out/
+checkpoints/
+*.pth
+*.safetensors
+*.bin
+!model/tokenizer.json
+!model/tokenizer_config.json
+
+# Datasets
+dataset/*.parquet
+!dataset/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+wandb/
+swanlab/
+
+# Transformers cache
+transformers_modules/
+
+# Misc
+*.tmp
