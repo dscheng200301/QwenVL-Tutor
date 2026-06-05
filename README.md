@@ -68,6 +68,8 @@
 
 ## 📋 评估指标矩阵
 
+### 传统分阶段评估
+
 | 阶段 | 评估命令 | 样本量 | 关键指标 | 绿灯标准 |
 |------|----------|--------|----------|----------|
 | 训练前 | `--stage baseline` | 500+200 | 基座准确率 / 步骤率 | 保存到 `eval_results/baseline.json` |
@@ -76,6 +78,41 @@
 | GRPO 后 | `--stage grpo` | 50+100+50 | avg_reward / 准确率不掉 / 退化检测 | avg_reward>0.5，退化<5% |
 | 细粒度 | `--stage fine` | 100+50 | 五维度雷达评分 | 加权总分>0.5 |
 | 最终发布 | `--stage full` | 4241+500 | 准确率 / 步骤率 | 全量 holdout 最终值 |
+
+### 多数据集评估（新增）
+
+| 评估数据集 | 评估命令 | 条数 | 评估指标 |
+|-----------|----------|------|----------|
+| ScienceQA | `--eval_dataset scienceqa` | 932 | 答案准确率 + 步骤完整率 + 启发式引导率 |
+| C-Eval | `--eval_dataset ceval` | 500 | 选项匹配率 |
+| OCR-VQA | `--eval_dataset ocr` | 1,000 | 关键词匹配率 |
+| Ape210K | `--eval_dataset ape210k` | 1,000 | 关键词匹配率 |
+| OpenR1-Math | `--eval_dataset openr1_math` | 1,000 | 关键词匹配率 + 步骤完整率 |
+| ChartQA | `--eval_dataset chartqa` | 1,000 | 答案匹配率 |
+| CMMLU | `--eval_dataset cmmlu` | 1,000 | 选项匹配率 |
+| MathVerse | `--eval_dataset math_verse` | 591 | 关键词匹配率 |
+| MathVista | `--eval_dataset math_vista` | 150 | 答案匹配率 |
+| RACE | `--eval_dataset race` | 1,000 | 选项匹配率 |
+| Gaokao MathQA | `--eval_dataset gaokao_mathqa` | 351 | 选项匹配率 |
+| Gaokao MathCloze | `--eval_dataset gaokao_mathcloze` | 118 | 数值匹配率 |
+
+```bash
+# 评估单个数据集
+python eval_edu.py --model_path out/edu_sft --eval_dataset openr1_math --max_samples 500
+
+# 一键评估所有 12 个数据集
+python eval_edu.py --model_path out/edu_sft --eval_all --max_samples 200
+```
+
+### 评估指标说明
+
+| 指标 | 计算方法 | 适用数据集 |
+|------|----------|-----------|
+| 答案准确率 | 检查模型回复中是否包含正确答案 | ScienceQA, MathVista, Gaokao |
+| 选项匹配率 | 检查答案选项字母是否出现 | C-Eval, CMMLU, RACE |
+| 关键词匹配率 | GT 答案中关键词与回复的交集比率 | OCR-VQA, Ape210K, MathVerse, OpenR1-Math |
+| 步骤完整率 | 回复中是否包含分步推理关键词 | 所有图文数学数据集 |
+| 启发式引导率 | 回复中是否包含引导性语言 | 亲子教育场景评估 |
 
 ## 🗂️ 项目架构
 
