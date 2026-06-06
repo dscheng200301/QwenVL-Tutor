@@ -6,8 +6,8 @@
 
 | 项目 | 规格 |
 |------|------|
-| **Python** | 3.11+ |
-| **PyTorch** | 2.5.0+ (CUDA 12.4) |
+| **Python** | 3.10+ |
+| **PyTorch** | 2.5.1+ (CUDA 12.x) |
 | **训练框架** | DeepSpeed ZeRO-2 / FSDP / DDP（自动选择） |
 | **基座模型** | Qwen2-VL-2B-Instruct (~4GB) |
 | **显卡要求** | 单卡 24GB+ 显存（A10G/A100/3090/4090 等） |
@@ -28,7 +28,7 @@
 
 ```bash
 conda create -n qwenvl-tutor python=3.10 -y && conda activate qwenvl-tutor
-pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu121
+pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 ```
 
