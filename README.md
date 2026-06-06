@@ -129,6 +129,10 @@ python trainer/train_grpo.py --use_wandb --wandb_project QwenSearch
 
 Apache 2.0 | 基座模型 [Qwen2-VL](https://github.com/QwenLM/Qwen-VL) 遵循其原始协议
 
+---
+
+> 更详细的技术细节（奖励模型设计、终端可视化、wandb 监控指标、数据分离机制等）见 **[README_DETAILED.md](README_DETAILED.md)**。
+
 ## 致谢
 
 - [MiniMind-V](https://github.com/jingyaogong/minimind-v) — 项目架构与 README 风格参考
