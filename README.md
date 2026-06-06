@@ -2,6 +2,20 @@
 
 基于 Qwen2-VL 的拍照做题 VLM，专为亲子教育场景设计。拍题即答，分步引导，亲子共学。
 
+## 关键信息
+
+| 项目 | 规格 |
+|------|------|
+| **Python** | 3.10+ |
+| **PyTorch** | 2.4.0 (CUDA 12.1) |
+| **训练框架** | DeepSpeed ZeRO-2 / FSDP / DDP（自动选择） |
+| **基座模型** | Qwen2-VL-2B-Instruct (~4GB) |
+| **显卡要求** | 单卡 24GB+ 显存（A10G/A100/3090/4090 等） |
+| **训练耗时** | SFT 约 2-4h/epoch，GRPO 约 1-2h/epoch（可中断续训） |
+| **存储需求** | 数据集 ~50GB，模型+输出 ~20GB |
+
+> **租显卡推荐**：国内推荐 [AutoDL](https://www.autodl.com/)、[恒源云](https://www.hyyq.com/)；海外 [Vast.ai](https://vast.ai/)、[Lambda Labs](https://lambdalabs.com/)。推荐配置：A10G 24G 或 RTX 4090 24G。
+
 ## 核心流程
 
 ```
