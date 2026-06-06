@@ -42,6 +42,7 @@ python scripts/convert_edu_data.py --dataset scienceqa --output dataset/edu_scie
 ```
 
 > `download_all_data.py` 内部调用 `scripts/convert_edu_data.py` 完成下载和格式转换，再调用 `create_eval_set()` 从训练集中**彻底分离**评估样本，确保训练/评估数据零重叠。输出目录：
+>
 > - 训练集：`dataset/edu_*.parquet`（22 个文件）
 > - 评估集：`dataset/eval/eval_*.parquet`（19 个文件）
 
@@ -51,8 +52,8 @@ python scripts/convert_edu_data.py --dataset scienceqa --output dataset/edu_scie
 # ① 基模评估（训练前基线，退化检测依赖此步）
 python scripts/eval/edu_evaluate.py run --stage baseline --eval_all --max_samples 200
 
-# ② SFT 训练（多卡自动 DDP）
-python trainer/train_sft.py --epochs 3 --save_weight edu_sft
+# ② SFT 训练（多卡自动 DDP，可选 --use_wandb 开启 wandb 监控）
+python trainer/train_sft.py --epochs 3 --save_weight edu_sft --use_wandb --wandb_project QwenVL-Tutor
 
 # ③ SFT 评估（自动 vLLM 加速）
 python scripts/eval/edu_evaluate.py all --stage sft --model_path out/edu_sft --eval_all
@@ -60,8 +61,8 @@ python scripts/eval/edu_evaluate.py all --stage sft --model_path out/edu_sft --e
 # ④ SFT 优化（基于评估结果自动 resample + retrain）
 python scripts/optimize/edu_optimize.py auto --epochs 2 --save_weight edu_sft_v2
 
-# ⑤ GRPO 训练（LLM-as-Judge 奖励）
-python trainer/train_grpo.py --from_weight ../out/edu_sft --epochs 1 --api_model gpt-4o-mini
+# ⑤ GRPO 训练（LLM-as-Judge 奖励，可选 --use_wandb 开启 wandb 监控）
+python trainer/train_grpo.py --from_weight ../out/edu_sft --epochs 1 --api_model gpt-4o-mini --use_wandb --wandb_project QwenVL-Tutor
 
 # ⑥ GRPO 评估
 python scripts/eval/edu_evaluate.py all --stage grpo --model_path out/edu_grpo --eval_all
@@ -72,6 +73,8 @@ python scripts/optimize/edu_optimize.py grpo --eval_file eval_results/grpo_xxx.j
 # ⑧ 最终评估
 python scripts/eval/edu_evaluate.py all --stage full --model_path out/edu_grpo --eval_all
 ```
+
+> **wandb 监控**：训练脚本内置 wandb/swanlab 支持，添加 `--use_wandb --wandb_project QwenVL-Tutor` 即可记录训练曲线。国内网络推荐使用 `swanlab`（`pip install swanlab`），参数相同。
 
 ## 项目结构
 
@@ -110,9 +113,11 @@ QwenVL-Tutor/
 ## 训练管线
 
 ### SFT 阶段
-22 个数据集（~222K 条），加权采样训练。多卡自动 DDP，支持 DeepSpeed/FSDP。
+
+22 个数据集（\~222K 条），加权采样训练。多卡自动 DDP，支持 DeepSpeed/FSDP。
 
 ### GRPO 阶段
+
 从 SFT 权重加载，使用 **LLM-as-Judge API** 作为奖励函数。模型生成 K 个候选回答，API 按 5 维度评分（准确性 0.40、完整性 0.20、引导性 0.20、流畅度 0.10、格式 0.10），组内标准化后计算策略损失。
 
 ```bash
@@ -125,39 +130,32 @@ python trainer/train_grpo.py --from_weight ../out/edu_sft --api_model deepseek-c
 
 ## 评估系统
 
-19 个评估数据集，支持 Bootstrap 置信区间 + p-value 显著性检验。详见 [EVAL_DESIGN.md](EVAL_DESIGN.md)。
+19 个评估数据集，支持 Bootstrap 置信区间 + p-value 显著性检验。详见 [EVAL\_DESIGN.md](EVAL_DESIGN.md)。
 
 ## 数据集
 
-22 个训练数据集（~222K），19 个评估数据集（~8,950）。中文图文占比 52.2%。详见 [DATA.md](DATA.md)。
+22 个训练数据集（\~222K），19 个评估数据集（\~8,950）。中文图文占比 52.2%。详见 [DATA.md](DATA.md)。
 
 ## 硬件要求
 
-| 配置 | 最低 | 推荐 |
-|------|------|------|
+| 配置  | 最低              | 推荐          |
+| --- | --------------- | ----------- |
 | GPU | RTX 3090 (24GB) | A100 (40GB) |
-| 显存 | 24 GB | 40 GB |
-| 内存 | 32 GB | 64 GB |
-| 硬盘 | 100 GB | 200 GB |
-
-## wandb 监控
-
-```bash
-# 训练时启用
-python trainer/train_sft.py --use_wandb --wandb_project QwenVL-Tutor
-python trainer/train_grpo.py --use_wandb --wandb_project QwenVL-Tutor
-```
+| 显存  | 24 GB           | 40 GB       |
+| 内存  | 32 GB           | 64 GB       |
+| 硬盘  | 100 GB          | 200 GB      |
 
 ## License
 
 Apache 2.0 | 基座模型 [Qwen2-VL](https://github.com/QwenLM/Qwen-VL) 遵循其原始协议
 
----
+***
 
-> 更详细的技术细节（奖励模型设计、终端可视化、wandb 监控指标、数据分离机制等）见 **[README_DETAILED.md](README_DETAILED.md)**。
+> 更详细的技术细节（奖励模型设计、终端可视化、wandb 监控指标、数据分离机制等）见 **[README\_DETAILED.md](README_DETAILED.md)**。
 
 ## 致谢
 
 - [MiniMind-V](https://github.com/jingyaogong/minimind-v) — 项目架构与 README 风格参考
 - [Qwen-VL](https://github.com/QwenLM/Qwen-VL) — 基座多模态模型
 - 22 个开源数据集作者（详见 [DATA.md](DATA.md)）
+
