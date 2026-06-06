@@ -2,7 +2,7 @@
 # 基于 Qwen2-VL 基座，拍照做题 + 解析输出
 
 # Core ML
-torch>=2.4.0
+torch>=2.5.0
 transformers>=4.45.0
 accelerate>=0.34.0
 peft>=0.12.0
