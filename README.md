@@ -5,7 +5,7 @@
 ## 核心流程
 
 ```
-下载模型 → 下载数据 → SFT 训练 → 评估 → 优化 → GRPO 训练 → 最终评估
+下载模型 → 下载+转换数据 → 分离训练/评估集 → SFT 训练 → 评估 → 优化 → GRPO 训练 → 最终评估
 ```
 
 ## 快速开始
@@ -25,11 +25,25 @@ pip install modelscope
 modelscope download --model qwen/Qwen2-VL-2B-Instruct --local_dir ./model/Qwen2-VL-2B-Instruct
 ```
 
-### 3. 下载数据集
+### 3. 下载 + 转换 + 分离训练/评估集
 
 ```bash
-python download_all_data.py       # 一键下载 22 训练 + 19 评估
+# 一键完成：下载原始数据集 → 转换为 Parquet 格式 → 分离训练集/评估集
+python download_all_data.py
+
+# 仅下载训练部分（不创建评估集）
+python download_all_data.py --train
+
+# 仅下载指定数据集
+python download_all_data.py --datasets scienceqa ceval
+
+# 单独转换某个数据集（如手动添加新数据）
+python scripts/convert_edu_data.py --dataset scienceqa --output dataset/edu_science.parquet
 ```
+
+> `download_all_data.py` 内部调用 `scripts/convert_edu_data.py` 完成下载和格式转换，再调用 `create_eval_set()` 从训练集中**彻底分离**评估样本，确保训练/评估数据零重叠。输出目录：
+> - 训练集：`dataset/edu_*.parquet`（22 个文件）
+> - 评估集：`dataset/eval/eval_*.parquet`（19 个文件）
 
 ### 4. 训练 + 评估 + 优化（一站式 5 步）
 
@@ -55,7 +69,7 @@ python scripts/eval/edu_evaluate.py all --stage full --model_path out/edu_grpo -
 ```
 qwensearch/
 ├── model/                     # Qwen2-VL 封装 + LoRA
-├── dataset/                   # 训练/评估数据（运行 download_all_data.py 下载）
+├── dataset/                   # 训练/评估数据（Parquet 格式）
 ├── trainer/
 │   ├── train_sft.py           # SFT 训练（DDP/DeepSpeed/FSDP）
 │   ├── train_grpo.py          # GRPO 训练（LLM-as-Judge API 奖励）
@@ -76,9 +90,9 @@ qwensearch/
 │   │   ├── edu_optimize.py    # 一站式优化入口
 │   │   ├── resample_data.py   # 数据重采样
 │   │   └── wandb_integration.py
-│   ├── download_all_data.py   # 一键下载
 │   ├── convert_edu_data.py    # 数据集转换
 │   └── web_demo.py            # Gradio Web Demo
+├── download_all_data.py        # 一键下载+转换+分离训练/评估集
 ├── EVAL_DESIGN.md             # 评估系统设计
 ├── DATA.md                    # 数据集详细说明
 └── requirements.txt
