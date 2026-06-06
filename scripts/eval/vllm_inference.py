@@ -1,11 +1,11 @@
-﻿"""
+"""
 QwenVL-Tutor vLLM 推理封装
 
 提供基于 vLLM 的批量推理后端，可替代原生 transformers.generate：
     - 吞吐提升 5-20x
     - 自动批处理 + Continuous batching
     - PagedAttention 显存优化
-    - 支持多模态（Qwen2-VL）
+    - 支持多模态（Qwen3-VL）
 """
 import os
 import sys
@@ -26,7 +26,7 @@ class VLLMBackend:
     使用示例:
         backend = VLLMBackend(
             model_path="./out/edu_sft",
-            base_model_path="./model/Qwen2-VL-2B-Instruct",
+            base_model_path="./model/Qwen3-VL-2B-Instruct",
             tensor_parallel_size=1,
             gpu_memory_utilization=0.85,
         )
@@ -40,7 +40,7 @@ class VLLMBackend:
     def __init__(
         self,
         model_path: str,
-        base_model_path: str = "./model/Qwen2-VL-2B-Instruct",
+        base_model_path: str = "./model/Qwen3-VL-2B-Instruct",
         tensor_parallel_size: int = 1,
         gpu_memory_utilization: float = 0.85,
         max_model_len: int = 4096,
@@ -86,10 +86,10 @@ class VLLMBackend:
         if quantization:
             llm_kwargs["quantization"] = quantization
 
-        # 多模态支持（Qwen2-VL）
+        # 多模态支持（Qwen3-VL）
         try:
             from vllm.model_executor.models import _MULTIMODAL_MODELS
-            llm_kwargs["model"] = llm_kwargs["model"]  # vLLM 自动识别 Qwen2-VL
+            llm_kwargs["model"] = llm_kwargs["model"]  # vLLM 自动识别 Qwen3-VL
         except Exception:
             pass
 
@@ -245,7 +245,7 @@ class HFBackend:
     当 vLLM 不可用时使用（如无 CUDA 12.1、显存不足等）
     """
 
-    def __init__(self, model_path, base_model_path="./model/Qwen2-VL-2B-Instruct"):
+    def __init__(self, model_path, base_model_path="./model/Qwen3-VL-2B-Instruct"):
         from transformers import AutoProcessor
         from model.qwen_vlm import QwenVLTutor, QwenVLTutorConfig
 
@@ -307,7 +307,7 @@ class HFBackend:
 
 def get_inference_backend(
     model_path,
-    base_model_path="./model/Qwen2-VL-2B-Instruct",
+    base_model_path="./model/Qwen3-VL-2B-Instruct",
     use_vllm=True,
     tensor_parallel_size=1,
     gpu_memory_utilization=0.85,
@@ -349,7 +349,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, default="./out/edu_sft")
-    parser.add_argument("--base_model", type=str, default="./model/Qwen2-VL-2B-Instruct")
+    parser.add_argument("--base_model", type=str, default="./model/Qwen3-VL-2B-Instruct")
     parser.add_argument("--use_vllm", type=int, default=1)
     parser.add_argument("--tp", type=int, default=1)
     args = parser.parse_args()

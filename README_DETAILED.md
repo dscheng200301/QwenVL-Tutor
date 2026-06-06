@@ -348,7 +348,7 @@ python scripts/eval/edu_evaluate.py report --output my_report.md
 
 ## License
 
-Apache 2.0 | 基座模型 [Qwen2-VL](https://github.com/QwenLM/Qwen-VL) 遵循其原始协议
+Apache 2.0 | 基座模型 [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL) 遵循其原始协议
 
 ## 致谢
 

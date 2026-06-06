@@ -1,6 +1,6 @@
-﻿"""
+"""
 QwenVL-Tutor 核心模型定义
-基于 Qwen2-VL 可插拔基座封装，适配亲子教育场景
+基于 Qwen3-VL 可插拔基座封装，适配亲子教育场景
 """
 import torch
 import torch.nn as nn
@@ -32,7 +32,7 @@ class QwenVLTutorConfig(PretrainedConfig):
 
     def __init__(
         self,
-        model_name_or_path: str = "Qwen/Qwen2-VL-2B-Instruct",
+        model_name_or_path: str = "Qwen/Qwen3-VL-2B-Instruct",
         use_lora: bool = True,
         lora_r: int = 64,
         lora_alpha: int = 128,
@@ -138,7 +138,7 @@ class QwenVLTutor(nn.Module):
         Args:
             input_ids: [batch_size, seq_len] 输入 token ids
             attention_mask: [batch_size, seq_len] 注意力掩码
-            pixel_values: 图像像素值（Qwen2-VL 格式）
+            pixel_values: 图像像素值（Qwen3-VL 格式）
             image_grid_thw: 图像网格信息
             labels: [batch_size, seq_len] 标签（-100 表示忽略）
 

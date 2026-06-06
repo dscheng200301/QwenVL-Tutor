@@ -186,7 +186,7 @@ if __name__ == "__main__":
 
     # 显式添加 no_auto_distributed 参数（用于接收 fork 后的额外参数）
     parser = argparse.ArgumentParser(description="QwenVL-Tutor SFT Training")
-    parser.add_argument("--model_name", type=str, default="./model/Qwen2-VL-2B-Instruct", help="基座模型路径")
+    parser.add_argument("--model_name", type=str, default="./model/Qwen3-VL-2B-Instruct", help="基座模型路径")
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
     parser.add_argument("--save_weight", type=str, default="edu_sft", help="保存权重的名称")
     parser.add_argument("--epochs", type=int, default=3, help="训练轮数")

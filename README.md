@@ -1,6 +1,6 @@
 # QwenVL-Tutor — 亲子教育 VLM
 
-基于 Qwen2-VL 的拍照做题 VLM，专为亲子教育场景设计。拍题即答，分步引导，亲子共学。
+基于 Qwen3-VL 的拍照做题 VLM，专为亲子教育场景设计。拍题即答，分步引导，亲子共学。
 
 ## 关键信息
 
@@ -9,7 +9,7 @@
 | **Python** | 3.10+ |
 | **PyTorch** | 2.5.1+ (CUDA 12.x) |
 | **训练框架** | DeepSpeed ZeRO-2 / FSDP / DDP（自动选择） |
-| **基座模型** | Qwen2-VL-2B-Instruct (~4GB) |
+| **基座模型** | Qwen3-VL-2B-Instruct (~4GB) |
 | **显卡要求** | 单卡 24GB+ 显存（A10G/A100/3090/4090 等） |
 | **训练耗时** | SFT 约 2-4h/epoch，GRPO 约 1-2h/epoch（可中断续训） |
 | **存储需求** | 数据集 ~50GB，模型+输出 ~20GB |
@@ -36,7 +36,7 @@ pip install -r requirements.txt
 
 ```bash
 pip install modelscope
-modelscope download --model qwen/Qwen2-VL-2B-Instruct --local_dir ./model/Qwen2-VL-2B-Instruct
+modelscope download --model qwen/Qwen3-VL-2B-Instruct --local_dir ./model/Qwen3-VL-2B-Instruct
 ```
 
 ### 3. 下载 + 转换 + 分离训练/评估集
@@ -94,7 +94,7 @@ python scripts/eval/edu_evaluate.py all --stage full --model_path out/edu_grpo -
 
 ```
 QwenVL-Tutor/
-├── model/                     # Qwen2-VL 封装 + LoRA
+├── model/                     # Qwen3-VL 封装 + LoRA
 ├── dataset/                   # 训练/评估数据（Parquet 格式）
 ├── trainer/
 │   ├── train_sft.py           # SFT 训练（DDP/DeepSpeed/FSDP）
@@ -161,7 +161,7 @@ python trainer/train_grpo.py --from_weight ../out/edu_sft --api_model deepseek-c
 
 ## License
 
-Apache 2.0 | 基座模型 [Qwen2-VL](https://github.com/QwenLM/Qwen-VL) 遵循其原始协议
+Apache 2.0 | 基座模型 [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL) 遵循其原始协议
 
 ***
 

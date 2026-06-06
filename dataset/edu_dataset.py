@@ -114,7 +114,7 @@ class EduDataset(Dataset):
             if conversations[0].get("role") != "system":
                 conversations = [system_msg] + conversations
 
-        # 转换对话格式为 Qwen2-VL 格式
+        # 转换对话格式为 Qwen3-VL 格式
         messages = []
         for turn in conversations:
             role = turn["role"]

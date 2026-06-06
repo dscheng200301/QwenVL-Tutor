@@ -1,4 +1,4 @@
-﻿# 📚 QwenVL-Tutor 数据集说明
+# 📚 QwenVL-Tutor 数据集说明
 
 > 22 个训练数据集 + 19 个评估数据集 | 评估集与训练集严格分离
 
@@ -151,7 +151,7 @@ python download_all_data.py --datasets scienceqa ceval cmmu
 
 ## 📚 参考资源
 
-- **基座模型**：[Qwen2-VL](https://github.com/QwenLM/Qwen-VL)
+- **基座模型**：[Qwen3-VL](https://github.com/QwenLM/Qwen3-VL)
 - **架构参考**：[MiniMind-V](https://github.com/jingyaogong/minimind-v)
 - **HuggingFace**：[datasets 文档](https://huggingface.co/docs/datasets)
 

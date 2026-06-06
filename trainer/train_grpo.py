@@ -209,7 +209,7 @@ def train_epoch(epoch, loader, iters, args, model, optimizer, reward_model,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QwenVL-Tutor GRPO Training")
-    parser.add_argument("--model_name", type=str, default="./model/Qwen2-VL-2B-Instruct", help="基座模型路径")
+    parser.add_argument("--model_name", type=str, default="./model/Qwen3-VL-2B-Instruct", help="基座模型路径")
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
     parser.add_argument("--save_weight", type=str, default="edu_grpo", help="保存权重的名称")
     parser.add_argument("--from_weight", type=str, default="../out/edu_sft", help="SFT 权重路径")

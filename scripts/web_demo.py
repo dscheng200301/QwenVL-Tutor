@@ -1,4 +1,4 @@
-﻿"""
+"""
 QwenVL-Tutor Web 演示
 Gradio 界面，支持拍照上传题目并获得分步解答
 """
@@ -22,7 +22,7 @@ EDU_DEFAULT_PROMPT = (
 )
 
 
-def load_model(model_path: str, base_model_name: str = "./model/Qwen2-VL-2B-Instruct"):
+def load_model(model_path: str, base_model_name: str = "./model/Qwen3-VL-2B-Instruct"):
     """加载训练好的 QwenVL-Tutor 模型"""
     config = QwenVLTutorConfig(
         model_name_or_path=base_model_name,
@@ -188,7 +188,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QwenVL-Tutor Web Demo")
     parser.add_argument("--model_path", type=str, default="../out/edu_grpo",
                         help="训练好的模型路径")
-    parser.add_argument("--base_model", type=str, default="./model/Qwen2-VL-2B-Instruct",
+    parser.add_argument("--base_model", type=str, default="./model/Qwen3-VL-2B-Instruct",
                         help="基座模型路径")
     parser.add_argument("--port", type=int, default=7860, help="服务端口")
     args = parser.parse_args()
