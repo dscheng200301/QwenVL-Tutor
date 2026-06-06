@@ -1,3 +1,3 @@
-from .edu_dataset import EduDataset, EduDPODataset, EduGRPODataset
+from .edu_dataset import EduDataset, EduGRPODataset
 
-__all__ = ["EduDataset", "EduDPODataset", "EduGRPODataset"]
+__all__ = ["EduDataset", "EduGRPODataset"]

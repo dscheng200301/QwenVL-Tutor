@@ -113,7 +113,6 @@ qwensearch/
 │   ├── optimize/              # 🆕 优化工具
 │   │   ├── edu_optimize.py    #   一站式入口（4 子命令）
 │   │   ├── resample_data.py   #   v2 平滑公式
-│   │   ├── build_preference_data.py
 │   │   └── wandb_integration.py
 │   ├── download_all_data.py   # 一键下载（严格分离 eval）
 │   ├── convert_edu_data.py    # 22 数据集转换

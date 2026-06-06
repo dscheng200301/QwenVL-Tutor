@@ -117,7 +117,6 @@ dataset/
 | `download_all_data.py` | 一键下载所有数据集，自动分离 eval |
 | `scripts/convert_edu_data.py` | 单个数据集转换（22 个 converter） |
 | `scripts/convert_windata.py` | windata 多子集转换 |
-| `scripts/create_eval_sets.py` | 创建评估集（旧版，已整合到 download_all_data） |
 
 ---
 

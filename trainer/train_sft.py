@@ -27,11 +27,17 @@ from trainer.trainer_utils import (
 warnings.filterwarnings('ignore')
 
 
-def train_epoch(epoch, loader, iters, start_step=0, wandb=None, ds_engine=None, fsdp_model=None):
+def train_epoch(epoch, loader, iters, args, model, optimizer, scaler, autocast_ctx,
+                 start_step=0, wandb=None, ds_engine=None, fsdp_model=None):
     """
     训练一个 epoch
 
     Args:
+        args: 训练参数
+        model: 模型
+        optimizer: 优化器
+        scaler: 混合精度 GradScaler
+        autocast_ctx: 混合精度上下文
         ds_engine: DeepSpeed engine（如果 use_deepspeed=1）
         fsdp_model: FSDP 包装后的模型（如果 use_fsdp=1）
     """
@@ -274,7 +280,7 @@ if __name__ == "__main__":
     elif args.use_fsdp:
         Logger(f'[SFT] 🆕 启用 FSDP（PyTorch 内置）')
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-        from torch.distributed.fsdp import MixedPrecision
+        from torch.distributed.fsdp import MixedPrecision, ShardingStrategy
         from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 
         # FSDP 自动包装策略（按 transformer 层分片）
@@ -286,7 +292,7 @@ if __name__ == "__main__":
         fsdp_model = FSDP(
             model,
             mixed_precision=mp_policy,
-            sharding_strategy={"FULL_SHARD": 0, "SHARD_GRAD_OP": 1, "NO_SHARD": 2}.get("FULL_SHARD", 0),
+            sharding_strategy=ShardingStrategy.FULL_SHARD,
             device_id=torch.cuda.current_device(),
         )
         if args.gradient_checkpointing:
@@ -361,8 +367,8 @@ if __name__ == "__main__":
             pin_memory=True,
             collate_fn=edu_sft_collate_fn,
         )
-        train_epoch(epoch, loader, len(loader), 0, wandb,
-                    ds_engine=ds_engine, fsdp_model=fsdp_model)
+        train_epoch(epoch, loader, len(loader), args, model, optimizer, scaler, autocast_ctx,
+                    0, wandb, ds_engine=ds_engine, fsdp_model=fsdp_model)
 
     # ========== 9. 最终保存 ==========
     if is_main_process():

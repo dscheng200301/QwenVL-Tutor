@@ -58,8 +58,6 @@ def generate_responses(
         response_text = processor.tokenizer.decode(new_tokens, skip_special_tokens=True)
 
         del gen_ids
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
         if len(response_text.strip()) > 0:
             responses.append(response_text)
@@ -67,7 +65,8 @@ def generate_responses(
     return responses
 
 
-def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
+def train_epoch(epoch, loader, iters, args, model, optimizer, reward_model,
+                 start_step=0, wandb=None):
     start_time = time.time()
     last_step = start_step
 
@@ -214,7 +213,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_name", type=str, default="./model/Qwen2-VL-2B-Instruct", help="基座模型路径")
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
     parser.add_argument("--save_weight", type=str, default="edu_grpo", help="保存权重的名称")
-    parser.add_argument("--from_weight", type=str, default="../out/edu_dpo", help="DPO 权重路径")
+    parser.add_argument("--from_weight", type=str, default="../out/edu_sft", help="SFT 权重路径")
     parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
     parser.add_argument("--batch_size", type=int, default=1, help="batch size")
     parser.add_argument("--learning_rate", type=float, default=1e-7, help="学习率")
@@ -310,7 +309,8 @@ if __name__ == "__main__":
             pin_memory=True,
             collate_fn=edu_grpo_collate_fn,
         )
-        train_epoch(epoch, loader, len(loader), 0, wandb)
+        train_epoch(epoch, loader, len(loader), args, model, optimizer, reward_model,
+                    0, wandb)
 
     if is_main_process():
         ckp = os.path.join(args.save_dir, args.save_weight)

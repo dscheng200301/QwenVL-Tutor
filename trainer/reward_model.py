@@ -137,7 +137,7 @@ class EduRewardModel:
         综合评分 = 0.5 * 关键词重叠率 + 0.5 * TF-IDF 相似度
         """
         if not gt_text:
-            return 0.5
+            return 0.0
         
         # 规范化文本
         gt_normalized = self._normalize_text(gt_text)

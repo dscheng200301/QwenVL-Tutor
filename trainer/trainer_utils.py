@@ -272,25 +272,6 @@ def edu_sft_collate_fn(batch):
     return input_ids, attention_mask, labels, pixel_values, image_grid_thw
 
 
-def edu_dpo_collate_fn(batch):
-    """DPO 数据整理函数"""
-    chosen_input_ids = torch.stack([b["chosen_input_ids"] for b in batch])
-    chosen_attention_mask = torch.stack([b["chosen_attention_mask"] for b in batch])
-    chosen_labels = torch.stack([b["chosen_labels"] for b in batch])
-
-    rejected_input_ids = torch.stack([b["rejected_input_ids"] for b in batch])
-    rejected_attention_mask = torch.stack([b["rejected_attention_mask"] for b in batch])
-    rejected_labels = torch.stack([b["rejected_labels"] for b in batch])
-
-    pixel_data = [b["pixel_values"] for b in batch]
-    pixel_values = torch.stack(pixel_data)
-    image_grid_thw = torch.stack([b["image_grid_thw"] for b in batch])
-
-    return (chosen_input_ids, chosen_attention_mask, chosen_labels,
-            rejected_input_ids, rejected_attention_mask, rejected_labels,
-            pixel_values, image_grid_thw)
-
-
 def edu_grpo_collate_fn(batch):
     """GRPO 数据整理函数"""
     prompt_input_ids = torch.stack([b["prompt_input_ids"] for b in batch])

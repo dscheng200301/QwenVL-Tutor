@@ -153,7 +153,6 @@ scripts/optimize/
 │   ├── retrain   # 触发再训练
 │   └── auto      # resample + retrain 一体化
 ├── resample_data.py         # v2 平滑公式
-├── build_preference_data.py # GRPO 数据（5K 精选）
 └── wandb_integration.py     # 多后端训练监控
 ```
 
@@ -273,7 +272,7 @@ python scripts/eval/generate_report.py --eval_file ... --output my_report.md
 4. **元评估** — 每月至少 1 次 `meta_evaluation.py`
 5. **脚本目录**（2026-06）：
    - 评估：`scripts/eval/`（edu_evaluate/eval_edu/compare_evals/analyze_errors/meta_evaluation/generate_report）
-   - 优化：`scripts/optimize/`（edu_optimize/resample_data/build_preference_data/wandb_integration）
+   - 优化：`scripts/optimize/`（edu_optimize/resample_data/wandb_integration）
    - 一站式入口：`edu_evaluate.py all` + `edu_optimize.py auto`
 6. **路径迁移** — 旧路径 `scripts/eval_edu.py` 已弃用，请改用 `scripts/eval/eval_edu.py`
 7. **评估集与训练集严格分离**（2026-06 修复）— `download_all_data.py` 的 `create_eval_set()` 会从训练集移除评估样本
