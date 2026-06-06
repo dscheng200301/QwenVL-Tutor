@@ -1,6 +1,6 @@
 """
 QwenSearch GRPO 强化优化训练
-基于教育奖励模型，通过组内相对优势优化模型策略
+使用 LLM-as-Judge API 作为奖励函数，通过组内相对优势优化模型策略
 """
 import os
 import sys
@@ -23,9 +23,8 @@ from trainer.trainer_utils import (
     get_lr, Logger, is_main_process, init_distributed_mode, setup_seed,
     get_model_params, SkipBatchSampler, edu_grpo_collate_fn,
 )
-from trainer.reward_model import (
-    EduRewardModel, edu_grpo_advantage, edu_grpo_policy_loss,
-)
+from trainer.llm_reward import APILLMRewardModel
+from trainer.reward_model import edu_grpo_advantage, edu_grpo_policy_loss
 
 warnings.filterwarnings('ignore')
 
@@ -231,6 +230,9 @@ if __name__ == "__main__":
     parser.add_argument("--data_path", type=str, default="../dataset/edu_science.parquet", help="训练数据路径")
     parser.add_argument("--use_wandb", action="store_true", help="是否使用 wandb/swanlab")
     parser.add_argument("--wandb_project", type=str, default="QwenSearch-GRPO", help="wandb 项目名")
+    parser.add_argument("--api_key", type=str, default="", help="LLM API Key（默认读取 OPENAI_API_KEY 环境变量）")
+    parser.add_argument("--api_model", type=str, default="gpt-4o-mini", help="LLM 奖励模型名称")
+    parser.add_argument("--api_base_url", type=str, default=None, help="LLM API 地址（兼容 OpenAI 格式）")
     args = parser.parse_args()
 
     # ========== 1. 初始化环境 ==========
@@ -270,12 +272,14 @@ if __name__ == "__main__":
     model = model.to(args.device)
     model.train()
 
-    # 奖励模型
-    reward_model = EduRewardModel(
-        tokenizer=model.processor.tokenizer,
-        ideal_length=150,
-        max_length=args.max_new_tokens,
+    # 奖励模型: LLM-as-Judge API
+    api_key = args.api_key or os.environ.get("OPENAI_API_KEY", "")
+    reward_model = APILLMRewardModel(
+        api_key=api_key,
+        model=args.api_model,
+        base_url=args.api_base_url,
     )
+    Logger(f'[GRPO] Reward model: API ({args.api_model})')
 
     get_model_params(model)
     Logger(f'[GRPO] K={args.num_generations}, clip_eps={args.clip_eps}, lr={args.learning_rate}')
