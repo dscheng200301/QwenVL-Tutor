@@ -1,5 +1,5 @@
-"""
-QwenSearch éè¯¯æ¡ä¾åæå·¥å·
+﻿"""
+QwenVL-Tutor éè¯¯æ¡ä¾åæå·¥å·
 
 åè½:
     1. èªå¨å½ç±»éè¯¯ç±»åï¼å¾åçè§?æ¨ç/æ ¼å¼/è®¡ç®/OCR/å¶ä»ï¼?    2. è¾åºéè¯¯åå¸æ¥å
@@ -239,7 +239,7 @@ def print_report(analysis: dict, eval_file: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="QwenSearch éè¯¯æ¡ä¾åæå·¥å·")
+    parser = argparse.ArgumentParser(description="QwenVL-Tutor éè¯¯æ¡ä¾åæå·¥å·")
     parser.add_argument("--eval_file", type=str, default=None,
                         help="è¯ä¼°ç»æ JSON æä»¶ï¼é»è®¤ä½¿ç?eval_results/latest.jsonï¼?)
     parser.add_argument("--output_errors", type=str, default=None,

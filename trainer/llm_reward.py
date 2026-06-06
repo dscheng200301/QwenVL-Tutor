@@ -1,5 +1,5 @@
-"""
-QwenSearch LLM-as-Judge 奖励模型
+﻿"""
+QwenVL-Tutor LLM-as-Judge 奖励模型
 
 提供 4 种 LLM Reward 后端：
     1. APILLMRewardModel  - 调用闭源 API（GPT-4o / Claude）

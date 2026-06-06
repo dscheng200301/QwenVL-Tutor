@@ -1,5 +1,5 @@
-"""
-QwenSearch 一键下载所有数据集
+﻿"""
+QwenVL-Tutor 一键下载所有数据集
 自动下载、转换训练数据集，并从训练集创建评估数据集
 
 使用方法:
@@ -208,7 +208,7 @@ def create_eval_set(train_path, eval_path, eval_ratio=0.05, eval_max_samples=500
 
 
 def main():
-    parser = argparse.ArgumentParser(description="QwenSearch 一键下载所有数据集")
+    parser = argparse.ArgumentParser(description="QwenVL-Tutor 一键下载所有数据集")
     parser.add_argument("--train", action="store_true", help="仅下载训练数据集")
     parser.add_argument("--eval", action="store_true", help="仅创建评估数据集（需要先有训练集）")
     parser.add_argument("--datasets", nargs="+", help="指定要下载的数据集名称")

@@ -1,5 +1,5 @@
-"""
-QwenSearch åè¯ä¼°å·¥å?
+﻿"""
+QwenVL-Tutor åè¯ä¼°å·¥å?
 åè½:
     1. æ£æ¥è¯ä¼°ææ ä¹é´çä¸è´æ§ï¼é¿åçç¾ææ ï¼?    2. ä¸?LLM-as-Judge (GPT-4o) å¯¹æ¯ï¼éªè¯èªå¨è¯ä¼°çå¯é æ?    3. äººå·¥æ½æ¥æ ·æ¬ç®¡ç
     4. å®æè¾åºææ å¥åº·æ¥å
@@ -235,7 +235,7 @@ def generate_monthly_report(eval_dir: str = "eval_results") -> str:
 
     # ç»è®¡æè¿?N ä¸ªè¯ä¼°ç»æ?    recent_files = files[-20:]  # æè¿?20 ä¸?
     report = []
-    report.append("# QwenSearch è¯ä¼°å¥åº·æåº¦æ¥å\n")
+    report.append("# QwenVL-Tutor è¯ä¼°å¥åº·æåº¦æ¥å\n")
     report.append(f"**çææ¶é´**: èªå¨çæ")
     report.append(f"**è¯ä¼°æä»¶æ»æ°**: {len(files)}")
     report.append(f"**æè¿è¯ä¼°æ¬¡æ?*: {len(recent_files)}\n")
@@ -257,7 +257,7 @@ def generate_monthly_report(eval_dir: str = "eval_results") -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="QwenSearch åè¯ä¼°å·¥å?)
+    parser = argparse.ArgumentParser(description="QwenVL-Tutor åè¯ä¼°å·¥å?)
     parser.add_argument("--check_consistency", action="store_true",
                         help="æ£æ¥è¯ä¼°ææ ä¸è´æ?)
     parser.add_argument("--llm_judge", type=str, default=None,

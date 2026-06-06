@@ -1,5 +1,5 @@
-"""
-QwenSearch 评估报告自动生成工具
+﻿"""
+QwenVL-Tutor 评估报告自动生成工具
 
 功能:
     1. 从多个评估结�?JSON 生成 Markdown 报告
@@ -126,7 +126,7 @@ def generate_markdown_report(eval_files: list, output_path: str = None,
 
     # 报告内容
     md = []
-    md.append("# QwenSearch 评估报告\n")
+    md.append("# QwenVL-Tutor 评估报告\n")
     md.append(f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     md.append(f"**评估文件�?*: {len(eval_files)}")
     md.append("")
@@ -256,7 +256,7 @@ def generate_markdown_report(eval_files: list, output_path: str = None,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="QwenSearch 评估报告生成")
+    parser = argparse.ArgumentParser(description="QwenVL-Tutor 评估报告生成")
     parser.add_argument("--eval_files", nargs="+", default=None,
                         help="评估结果文件列表（默认使用最新的）")
     parser.add_argument("--mode", type=str, default="single",

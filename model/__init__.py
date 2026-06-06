@@ -1,3 +1,3 @@
-from .qwen_vlm import QwenSearchVLM, QwenSearchConfig
+﻿from .qwen_vlm import QwenVLTutor, QwenVLTutorConfig
 
-__all__ = ["QwenSearchVLM", "QwenSearchConfig"]
+__all__ = ["QwenVLTutor", "QwenVLTutorConfig"]

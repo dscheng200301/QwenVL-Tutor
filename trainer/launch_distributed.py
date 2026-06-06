@@ -1,5 +1,5 @@
-"""
-QwenSearch 分布式训练启动器
+﻿"""
+QwenVL-Tutor 分布式训练启动器
 
 提供统一的启动接口，支持多种分布式方案:
     - 单卡训练 (单进程)
@@ -189,7 +189,7 @@ num_processes: 4
 
 
 def main():
-    parser = argparse.ArgumentParser(description="QwenSearch 分布式训练启动器")
+    parser = argparse.ArgumentParser(description="QwenVL-Tutor 分布式训练启动器")
     parser.add_argument("--mode", type=str, default="ddp",
                         choices=["single", "ddp", "deepspeed", "fsdp", "accelerate"],
                         help="训练模式")
@@ -217,7 +217,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 70)
-    print(f"QwenSearch 分布式训练启动器")
+    print(f"QwenVL-Tutor 分布式训练启动器")
     print("=" * 70)
     print(f"模式: {args.mode}")
     print(f"GPU 数: {args.nproc_per_node} × 节点 {args.nnodes} = {args.nproc_per_node * args.nnodes}")

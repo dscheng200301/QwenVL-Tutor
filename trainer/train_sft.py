@@ -1,5 +1,5 @@
-"""
-QwenSearch SFT 微调训练
+﻿"""
+QwenVL-Tutor SFT 微调训练
 基于 Qwen2-VL 基座，在教育数据集上进行监督微调
 """
 import os
@@ -17,7 +17,7 @@ from contextlib import nullcontext
 from torch import optim
 from torch.utils.data import DataLoader, DistributedSampler
 
-from model.qwen_vlm import QwenSearchVLM, QwenSearchConfig
+from model.qwen_vlm import QwenVLTutor, QwenVLTutorConfig
 from dataset.edu_dataset import EduDataset
 from trainer.trainer_utils import (
     get_lr, Logger, is_main_process, init_distributed_mode, setup_seed,
@@ -185,7 +185,7 @@ if __name__ == "__main__":
         sys.exit(subprocess.run(cmd, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).returncode)
 
     # 显式添加 no_auto_distributed 参数（用于接收 fork 后的额外参数）
-    parser = argparse.ArgumentParser(description="QwenSearch SFT Training")
+    parser = argparse.ArgumentParser(description="QwenVL-Tutor SFT Training")
     parser.add_argument("--model_name", type=str, default="./model/Qwen2-VL-2B-Instruct", help="基座模型路径")
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
     parser.add_argument("--save_weight", type=str, default="edu_sft", help="保存权重的名称")
@@ -207,7 +207,7 @@ if __name__ == "__main__":
         help="数据路径，逗号分隔（默认12个数据集）")
     parser.add_argument("--use_lora", type=int, default=1, choices=[0, 1], help="是否使用 LoRA")
     parser.add_argument("--use_wandb", action="store_true", help="是否使用 wandb/swanlab")
-    parser.add_argument("--wandb_project", type=str, default="QwenSearch-SFT", help="wandb 项目名")
+    parser.add_argument("--wandb_project", type=str, default="QwenVL-Tutor-SFT", help="wandb 项目名")
     # === 分布式训练参数 ===
     parser.add_argument("--use_deepspeed", type=int, default=0, choices=[0, 1], help="是否使用 DeepSpeed (ZeRO)")
     parser.add_argument("--deepspeed_zero_stage", type=int, default=2, choices=[1, 2, 3], help="DeepSpeed ZeRO 阶段")
@@ -237,19 +237,19 @@ if __name__ == "__main__":
     wandb = None
     if args.use_wandb and is_main_process():
         import wandb
-        wandb_run_name = f"QwenSearch-SFT-E{args.epochs}-B{args.batch_size}-LR{args.learning_rate}"
+        wandb_run_name = f"QwenVL-Tutor-SFT-E{args.epochs}-B{args.batch_size}-LR{args.learning_rate}"
         wandb.init(project=args.wandb_project, name=wandb_run_name)
 
     # ========== 5. 加载模型 ==========
     Logger(f'[SFT] Loading model from: {args.model_name}')
-    config = QwenSearchConfig(
+    config = QwenVLTutorConfig(
         model_name_or_path=args.model_name,
         use_lora=bool(args.use_lora),
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         max_seq_len=args.max_seq_len,
     )
-    model = QwenSearchVLM(config)
+    model = QwenVLTutor(config)
     model = model.to(args.device)
     get_model_params(model)
 

@@ -1,6 +1,6 @@
-"""
+﻿"""
 教育数据集格式转换工具
-将多个开源教育数据集统一转换为 QwenSearch 的 Parquet 格式
+将多个开源教育数据集统一转换为 QwenVL-Tutor 的 Parquet 格式
 
 支持的数据集（共23个）:
     图文数学: scienceqa, mathverse, mathvista, tabmwp, math23k, ape210k, geometry3k, clevr_math

@@ -1,5 +1,5 @@
-"""
-QwenSearch 终端实时可视化 Dashboard
+﻿"""
+QwenVL-Tutor 终端实时可视化 Dashboard
 
 提供训练/评估/优化时的实时进度窗口:
     - 进度条（epoch / step / ETA）
@@ -57,7 +57,7 @@ class Dashboard:
 
     def __init__(
         self,
-        title: str = "QwenSearch",
+        title: str = "QwenVL-Tutor",
         total_steps: Optional[int] = None,
         show_gpu: bool = True,
         refresh_per_second: int = 4,
@@ -195,7 +195,7 @@ class Dashboard:
 
 
 @contextmanager
-def dashboard_context(title: str = "QwenSearch", total_steps: Optional[int] = None):
+def dashboard_context(title: str = "QwenVL-Tutor", total_steps: Optional[int] = None):
     """
     Dashboard 上下文管理器
 

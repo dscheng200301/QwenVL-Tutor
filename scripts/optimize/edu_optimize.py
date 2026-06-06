@@ -1,5 +1,5 @@
-"""
-QwenSearch 一站式优化脚本
+﻿"""
+QwenVL-Tutor 一站式优化脚本
 
 合并功能（替代 3 个分散脚本）:
     resample  - 数据重采样（替代 resample_data.py）
@@ -181,7 +181,7 @@ def cmd_auto(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="QwenSearch ä¸ç«å¼ä¼åèæ¬",
+        description="QwenVL-Tutor ä¸ç«å¼ä¼åèæ¬",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 ç¤ºä¾:

@@ -1,4 +1,4 @@
-# QwenSearch 详细文档
+﻿# QwenVL-Tutor 详细文档
 
 > 本文档为 [README.md](README.md) 的补充，包含项目架构设计、技术细节和高级用法。快速上手请先阅读 [README.md](README.md)。
 
@@ -228,8 +228,8 @@ Evaluation 开始，共 19 个数据集
 ### 关闭（如不需要）
 
 ```bash
-QWENSEARCH_NO_DASHBOARD=1 python trainer/train_sft.py --epochs 3
-QWENSEARCH_NO_DASHBOARD=1 python scripts/eval/edu_evaluate.py all ...
+QwenVL-Tutor_NO_DASHBOARD=1 python trainer/train_sft.py --epochs 3
+QwenVL-Tutor_NO_DASHBOARD=1 python scripts/eval/edu_evaluate.py all ...
 ```
 
 > 不依赖 wandb，离线运行也可用。
@@ -244,8 +244,8 @@ QWENSEARCH_NO_DASHBOARD=1 python scripts/eval/edu_evaluate.py all ...
 
 ```bash
 # 训练时启用
-python trainer/train_sft.py --use_wandb --wandb_project QwenSearch
-python trainer/train_grpo.py --use_wandb --wandb_project QwenSearch
+python trainer/train_sft.py --use_wandb --wandb_project QwenVL-Tutor
+python trainer/train_grpo.py --use_wandb --wandb_project QwenVL-Tutor
 
 # 通过一站式脚本启用
 python scripts/optimize/edu_optimize.py retrain --use_wandb --epochs 2
@@ -271,8 +271,8 @@ python scripts/optimize/edu_optimize.py retrain --use_wandb --epochs 2
 
 ```bash
 wandb login
-wandb sweep / WANDB_PROJECT=QwenSearch wandb graph
-wandb compare --project QwenSearch
+wandb sweep / WANDB_PROJECT=QwenVL-Tutor wandb graph
+wandb compare --project QwenVL-Tutor
 ```
 
 > 训练脚本已内置 wandb 集成，启用后无需额外配置。GPU 监控建议用 `nvidia-smi dmon` 或 wandb 的 system metrics。

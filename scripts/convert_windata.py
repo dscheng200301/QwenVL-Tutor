@@ -1,5 +1,5 @@
-"""
-转换 windata-vision-synthetics-zh-300k 数据集为 QwenSearch Parquet 格式
+﻿"""
+转换 windata-vision-synthetics-zh-300k 数据集为 QwenVL-Tutor Parquet 格式
 支持中文多模态图文数据，包含文档、图表、数学等多种场景
 
 使用方法:
@@ -38,7 +38,7 @@ def load_image(image_path):
 
 
 def convert_conversation(conv_data):
-    """转换对话格式为 QwenSearch 格式"""
+    """转换对话格式为 QwenVL-Tutor 格式"""
     conversations = []
     
     for turn in conv_data:

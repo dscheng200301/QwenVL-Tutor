@@ -1,5 +1,5 @@
-"""
-QwenSearch 教育场景评估脚本
+﻿"""
+QwenVL-Tutor 教育场景评估脚本
 
 两阶段评估矩�?(SFT �?GRPO):
     baseline  : 基座模型 �?保存基线�?eval_results/baseline.json
@@ -26,7 +26,7 @@ import torch
 import random
 from tqdm import tqdm
 from PIL import Image
-from model.qwen_vlm import QwenSearchVLM, QwenSearchConfig
+from model.qwen_vlm import QwenVLTutor, QwenVLTutorConfig
 
 warnings.filterwarnings('ignore')
 
@@ -60,11 +60,11 @@ def load_model(model_path, base_model_name="./model/Qwen2-VL-2B-Instruct",
             use_vllm = False
 
     # HF transformers 后端
-    config = QwenSearchConfig(
+    config = QwenVLTutorConfig(
         model_name_or_path=base_model_name,
         use_lora=True,
     )
-    model = QwenSearchVLM(config)
+    model = QwenVLTutor(config)
 
     if os.path.exists(model_path):
         from peft import PeftModel
@@ -761,7 +761,7 @@ def compute_two_sample_pvalue(scores1, scores2, n_bootstrap: int = 1000):
 # CLI 入口
 # ============================================================================
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="QwenSearch 多阶段评�?)
+    parser = argparse.ArgumentParser(description="QwenVL-Tutor 多阶段评�?)
     parser.add_argument("--model_path", type=str, default="./out/edu_sft", help="模型权重路径")
     parser.add_argument("--base_model", type=str, default="./model/Qwen2-VL-2B-Instruct", help="基座模型路径")
     parser.add_argument("--stage", type=str, default="sft",

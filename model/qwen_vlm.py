@@ -1,5 +1,5 @@
-"""
-QwenSearch 核心模型定义
+﻿"""
+QwenVL-Tutor 核心模型定义
 基于 Qwen2-VL 可插拔基座封装，适配亲子教育场景
 """
 import torch
@@ -17,8 +17,8 @@ from dataclasses import dataclass
 
 
 @dataclass
-class QwenSearchOutput(ModelOutput):
-    """QwenSearch 模型输出"""
+class QwenVLTutorOutput(ModelOutput):
+    """QwenVL-Tutor 模型输出"""
     loss: Optional[torch.Tensor] = None
     logits: Optional[torch.Tensor] = None
     past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None
@@ -26,9 +26,9 @@ class QwenSearchOutput(ModelOutput):
     aux_loss: Optional[torch.Tensor] = None
 
 
-class QwenSearchConfig(PretrainedConfig):
-    """QwenSearch 模型配置，兼容 Qwen2-VL 配置"""
-    model_type = "qwensearch"
+class QwenVLTutorConfig(PretrainedConfig):
+    """QwenVL-Tutor 模型配置，兼容 Qwen2-VL 配置"""
+    model_type = "QwenVL-Tutor"
 
     def __init__(
         self,
@@ -62,17 +62,17 @@ class QwenSearchConfig(PretrainedConfig):
         self.system_prompt = system_prompt
 
 
-class QwenSearchVLM(nn.Module):
+class QwenVLTutor(nn.Module):
     """
     亲子教育 VLM 模型
     封装 Qwen2-VL，支持 LoRA 微调 + 多阶段训练
 
     使用方法:
-        model = QwenSearchVLM.from_pretrained("./model/Qwen2-VL-2B-Instruct")
+        model = QwenVLTutor.from_pretrained("./model/Qwen2-VL-2B-Instruct")
         # 默认启用 LoRA，只训练 adapter 参数
     """
 
-    def __init__(self, config: QwenSearchConfig):
+    def __init__(self, config: QwenVLTutorConfig):
         super().__init__()
         self.config = config
 
@@ -131,7 +131,7 @@ class QwenSearchVLM(nn.Module):
         image_grid_thw: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> QwenSearchOutput:
+    ) -> QwenVLTutorOutput:
         """
         前向传播
 
@@ -143,7 +143,7 @@ class QwenSearchVLM(nn.Module):
             labels: [batch_size, seq_len] 标签（-100 表示忽略）
 
         Returns:
-            QwenSearchOutput
+            QwenVLTutorOutput
         """
         outputs = self.base_model(
             input_ids=input_ids,
@@ -154,7 +154,7 @@ class QwenSearchVLM(nn.Module):
             **kwargs,
         )
 
-        return QwenSearchOutput(
+        return QwenVLTutorOutput(
             loss=outputs.loss,
             logits=outputs.logits,
             past_key_values=outputs.past_key_values,
@@ -255,7 +255,7 @@ class QwenSearchVLM(nn.Module):
     @classmethod
     def from_pretrained(cls, model_path: str, **kwargs):
         """从预训练权重加载"""
-        config = QwenSearchConfig(model_name_or_path=model_path, **kwargs)
+        config = QwenVLTutorConfig(model_name_or_path=model_path, **kwargs)
         model = cls(config)
         return model
 

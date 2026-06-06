@@ -1,5 +1,5 @@
-"""
-QwenSearch 一站式评估脚本
+﻿"""
+QwenVL-Tutor 一站式评估脚本
 
 合并功能（替代 8 个分散脚本）:
     run       - 运行评估（替代 eval_edu.py）
@@ -268,7 +268,7 @@ def cmd_all(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="QwenSearch 一站式评估脚本（自动 vLLM）",
+        description="QwenVL-Tutor 一站式评估脚本（自动 vLLM）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:

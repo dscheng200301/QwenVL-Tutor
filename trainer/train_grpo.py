@@ -1,5 +1,5 @@
-"""
-QwenSearch GRPO 强化优化训练
+﻿"""
+QwenVL-Tutor GRPO 强化优化训练
 使用 LLM-as-Judge API 作为奖励函数，通过组内相对优势优化模型策略
 """
 import os
@@ -17,7 +17,7 @@ from contextlib import nullcontext
 from torch import optim
 from torch.utils.data import DataLoader, DistributedSampler
 
-from model.qwen_vlm import QwenSearchVLM, QwenSearchConfig
+from model.qwen_vlm import QwenVLTutor, QwenVLTutorConfig
 from dataset.edu_dataset import EduGRPODataset
 from trainer.trainer_utils import (
     get_lr, Logger, is_main_process, init_distributed_mode, setup_seed,
@@ -208,7 +208,7 @@ def train_epoch(epoch, loader, iters, args, model, optimizer, reward_model,
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="QwenSearch GRPO Training")
+    parser = argparse.ArgumentParser(description="QwenVL-Tutor GRPO Training")
     parser.add_argument("--model_name", type=str, default="./model/Qwen2-VL-2B-Instruct", help="基座模型路径")
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
     parser.add_argument("--save_weight", type=str, default="edu_grpo", help="保存权重的名称")
@@ -229,7 +229,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_seq_len", type=int, default=2048, help="最大序列长度")
     parser.add_argument("--data_path", type=str, default="../dataset/edu_science.parquet", help="训练数据路径")
     parser.add_argument("--use_wandb", action="store_true", help="是否使用 wandb/swanlab")
-    parser.add_argument("--wandb_project", type=str, default="QwenSearch-GRPO", help="wandb 项目名")
+    parser.add_argument("--wandb_project", type=str, default="QwenVL-Tutor-GRPO", help="wandb 项目名")
     parser.add_argument("--api_key", type=str, default="", help="LLM API Key（默认读取 OPENAI_API_KEY 环境变量）")
     parser.add_argument("--api_model", type=str, default="gpt-4o-mini", help="LLM 奖励模型名称")
     parser.add_argument("--api_base_url", type=str, default=None, help="LLM API 地址（兼容 OpenAI 格式）")
@@ -252,18 +252,18 @@ if __name__ == "__main__":
     wandb = None
     if args.use_wandb and is_main_process():
         import wandb
-        wandb_run_name = f"QwenSearch-GRPO-E{args.epochs}-K{args.num_generations}-LR{args.learning_rate}"
+        wandb_run_name = f"QwenVL-Tutor-GRPO-E{args.epochs}-K{args.num_generations}-LR{args.learning_rate}"
         wandb.init(project=args.wandb_project, name=wandb_run_name)
 
     # ========== 4. 加载模型 ==========
     Logger(f'[GRPO] Loading base model from: {args.model_name}')
     Logger(f'[GRPO] Loading checkpoint from: {args.from_weight}')
-    config = QwenSearchConfig(
+    config = QwenVLTutorConfig(
         model_name_or_path=args.model_name,
         use_lora=True,
         max_seq_len=args.max_seq_len,
     )
-    model = QwenSearchVLM(config)
+    model = QwenVLTutor(config)
     if os.path.exists(args.from_weight):
         from peft import PeftModel
         model.base_model = PeftModel.from_pretrained(

@@ -1,4 +1,4 @@
-# QwenSearch — 亲子教育 VLM
+﻿# QwenVL-Tutor — 亲子教育 VLM
 
 基于 Qwen2-VL 的拍照做题 VLM，专为亲子教育场景设计。拍题即答，分步引导，亲子共学。
 
@@ -13,7 +13,7 @@
 ### 1. 环境
 
 ```bash
-conda create -n qwensearch python=3.10 -y && conda activate qwensearch
+conda create -n qwenvl-tutor python=3.10 -y && conda activate qwenvl-tutor
 pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
 ```
@@ -67,7 +67,7 @@ python scripts/eval/edu_evaluate.py all --stage full --model_path out/edu_grpo -
 ## 项目结构
 
 ```
-qwensearch/
+QwenVL-Tutor/
 ├── model/                     # Qwen2-VL 封装 + LoRA
 ├── dataset/                   # 训练/评估数据（Parquet 格式）
 ├── trainer/
@@ -135,8 +135,8 @@ python trainer/train_grpo.py --from_weight ../out/edu_sft --api_model deepseek-c
 
 ```bash
 # 训练时启用
-python trainer/train_sft.py --use_wandb --wandb_project QwenSearch
-python trainer/train_grpo.py --use_wandb --wandb_project QwenSearch
+python trainer/train_sft.py --use_wandb --wandb_project QwenVL-Tutor
+python trainer/train_grpo.py --use_wandb --wandb_project QwenVL-Tutor
 ```
 
 ## License

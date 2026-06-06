@@ -1,5 +1,5 @@
-"""
-QwenSearch Web 演示
+﻿"""
+QwenVL-Tutor Web 演示
 Gradio 界面，支持拍照上传题目并获得分步解答
 """
 import os
@@ -12,7 +12,7 @@ import torch
 import warnings
 import gradio as gr
 from PIL import Image
-from model.qwen_vlm import QwenSearchVLM, QwenSearchConfig
+from model.qwen_vlm import QwenVLTutor, QwenVLTutorConfig
 
 warnings.filterwarnings('ignore')
 
@@ -23,12 +23,12 @@ EDU_DEFAULT_PROMPT = (
 
 
 def load_model(model_path: str, base_model_name: str = "./model/Qwen2-VL-2B-Instruct"):
-    """加载训练好的 QwenSearch 模型"""
-    config = QwenSearchConfig(
+    """加载训练好的 QwenVL-Tutor 模型"""
+    config = QwenVLTutorConfig(
         model_name_or_path=base_model_name,
         use_lora=True,
     )
-    model = QwenSearchVLM(config)
+    model = QwenVLTutor(config)
 
     if os.path.exists(model_path):
         from peft import PeftModel
@@ -99,12 +99,12 @@ def launch_demo(model_path: str, base_model: str, server_port: int = 7860):
     processor = model.processor
 
     with gr.Blocks(
-        title="QwenSearch - 拍照做题",
+        title="QwenVL-Tutor - 拍照做题",
         theme=gr.themes.Soft(),
     ) as demo:
         gr.Markdown(
             """
-            # 📸 QwenSearch - 拍照做题助手
+            # 📸 QwenVL-Tutor - 拍照做题助手
 
             上传题目图片，获取详细的解题步骤和答案。
 
@@ -185,7 +185,7 @@ def launch_demo(model_path: str, base_model: str, server_port: int = 7860):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="QwenSearch Web Demo")
+    parser = argparse.ArgumentParser(description="QwenVL-Tutor Web Demo")
     parser.add_argument("--model_path", type=str, default="../out/edu_grpo",
                         help="训练好的模型路径")
     parser.add_argument("--base_model", type=str, default="./model/Qwen2-VL-2B-Instruct",

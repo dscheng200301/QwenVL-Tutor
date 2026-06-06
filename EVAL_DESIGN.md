@@ -1,4 +1,4 @@
-# QwenSearch 评估系统设计
+﻿# QwenVL-Tutor 评估系统设计
 
 ## 概述
 

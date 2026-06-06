@@ -1,5 +1,5 @@
-"""
-QwenSearch vLLM 推理封装
+﻿"""
+QwenVL-Tutor vLLM 推理封装
 
 提供基于 vLLM 的批量推理后端，可替代原生 transformers.generate：
     - 吞吐提升 5-20x
@@ -247,14 +247,14 @@ class HFBackend:
 
     def __init__(self, model_path, base_model_path="./model/Qwen2-VL-2B-Instruct"):
         from transformers import AutoProcessor
-        from model.qwen_vlm import QwenSearchVLM, QwenSearchConfig
+        from model.qwen_vlm import QwenVLTutor, QwenVLTutorConfig
 
         print(f"[HF] 加载模型: {model_path}")
-        config = QwenSearchConfig(
+        config = QwenVLTutorConfig(
             model_name_or_path=base_model_path,
             use_lora=True,
         )
-        self.model = QwenSearchVLM(config)
+        self.model = QwenVLTutor(config)
         if os.path.exists(model_path):
             from peft import PeftModel
             self.model.base_model = PeftModel.from_pretrained(
