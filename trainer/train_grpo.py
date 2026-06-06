@@ -1,4 +1,4 @@
-﻿"""
+"""
 QwenVL-Tutor GRPO 强化优化训练
 使用 LLM-as-Judge API 作为奖励函数，通过组内相对优势优化模型策略
 """
@@ -233,6 +233,8 @@ if __name__ == "__main__":
     parser.add_argument("--api_key", type=str, default="", help="LLM API Key（默认读取 OPENAI_API_KEY 环境变量）")
     parser.add_argument("--api_model", type=str, default="gpt-4o-mini", help="LLM 奖励模型名称")
     parser.add_argument("--api_base_url", type=str, default=None, help="LLM API 地址（兼容 OpenAI 格式）")
+    parser.add_argument("--resume", action="store_true",
+                        help="从 checkpoint 断点续训练（自动检测 out/{save_weight}/ 中的最新 checkpoint）")
     args = parser.parse_args()
 
     # ========== 1. 初始化环境 ==========
@@ -242,6 +244,42 @@ if __name__ == "__main__":
     setup_seed(42 + (dist.get_rank() if dist.is_initialized() else 0))
 
     os.makedirs(args.save_dir, exist_ok=True)
+
+    # ========== 2.5 断点续训练（resume） ==========
+    resume_step = 0
+    resume_ckp_path = None
+    if args.resume and is_main_process():
+        ckp_dir = os.path.join(args.save_dir, args.save_weight)
+        import glob
+        # 查找所有 checkpoint 子目录
+        step_dirs = glob.glob(os.path.join(ckp_dir, "checkpoint-*"))
+        if step_dirs:
+            # 找到最大的 step
+            max_step = 0
+            for d in step_dirs:
+                try:
+                    step_num = int(os.path.basename(d).split("-")[-1])
+                    if step_num > max_step:
+                        max_step = step_num
+                        resume_ckp_path = d
+                except:
+                    pass
+            if resume_ckp_path:
+                resume_step = max_step
+                Logger(f'[GRPO] Resume from checkpoint: {resume_ckp_path} (step {resume_step})')
+                # 更新 wandb run name
+                if args.use_wandb:
+                    wandb_run_name = f"QwenVL-Tutor-GRPO-E{args.epochs}-K{args.num_generations}-LR{args.learning_rate}-resume{resume_step}"
+                # 直接用 checkpoint 路径作为 from_weight，后续加载时会用到
+                args.from_weight = resume_ckp_path
+        else:
+            Logger(f'[GRPO] Resume enabled but no checkpoint found in {ckp_dir}, starting from scratch')
+
+    # 广播 resume_step 到所有进程
+    if dist.is_initialized():
+        resume_step_tensor = torch.tensor(resume_step, dtype=torch.long, device='cuda')
+        dist.broadcast(resume_step_tensor, src=0)
+        resume_step = resume_step_tensor.item()
 
     # ========== 2. 混合精度 ==========
     device_type = "cuda" if "cuda" in args.device else "cpu"
@@ -300,12 +338,26 @@ if __name__ == "__main__":
     )
 
     # ========== 7. 开始训练 ==========
+    # 计算每个 epoch 的 batch 数量，用于断点续训练的全局 step 定位
+    batches_per_epoch = len(train_ds) // args.batch_size
+    global_resume_step = resume_step  # 累积的全局 step（跨 epoch）
+
     for epoch in range(args.epochs):
         if train_sampler:
             train_sampler.set_epoch(epoch)
         setup_seed(42 + epoch)
         indices = torch.randperm(len(train_ds)).tolist()
-        batch_sampler = SkipBatchSampler(train_sampler or indices, args.batch_size, 0)
+
+        # 断点续训练：跳过已完成的全 epoch
+        if global_resume_step >= batches_per_epoch:
+            global_resume_step -= batches_per_epoch
+            continue
+
+        # 断点续训练：计算当前 epoch 需要跳过的 batch 数
+        skip_batches = global_resume_step
+        global_resume_step = 0  # 只在第一个 epoch 需要跳过部分 batch
+
+        batch_sampler = SkipBatchSampler(train_sampler or indices, args.batch_size, skip_batches)
         loader = DataLoader(
             train_ds,
             batch_sampler=batch_sampler,
@@ -313,8 +365,8 @@ if __name__ == "__main__":
             pin_memory=True,
             collate_fn=edu_grpo_collate_fn,
         )
-        train_epoch(epoch, loader, len(loader), args, model, optimizer, reward_model,
-                    0, wandb)
+        train_epoch(epoch, loader, batches_per_epoch, args, model, optimizer, reward_model,
+                    skip_batches, wandb)
 
     if is_main_process():
         ckp = os.path.join(args.save_dir, args.save_weight)

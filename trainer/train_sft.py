@@ -1,4 +1,4 @@
-﻿"""
+"""
 QwenVL-Tutor SFT 微调训练
 基于 Qwen2-VL 基座，在教育数据集上进行监督微调
 """
@@ -217,6 +217,8 @@ if __name__ == "__main__":
     parser.add_argument("--gradient_checkpointing", type=int, default=0, choices=[0, 1], help="是否启用梯度检查点（节省显存）")
     parser.add_argument("--no_auto_distributed", action="store_true",
                         help="关闭自动 DDP 检测（多卡时也不自动 fork 到 torchrun）")
+    parser.add_argument("--resume", action="store_true",
+                        help="从 checkpoint 断点续训练（自动检测 out/{save_weight}/ 中的最新 checkpoint）")
     args = parser.parse_args()
 
     # ========== 1. 初始化环境 ==========
@@ -227,6 +229,42 @@ if __name__ == "__main__":
 
     # ========== 2. 设置输出目录 ==========
     os.makedirs(args.save_dir, exist_ok=True)
+
+    # ========== 2.5 断点续训练（resume） ==========
+    resume_step = 0
+    resume_ckp_path = None
+    if args.resume and is_main_process():
+        ckp_dir = os.path.join(args.save_dir, args.save_weight)
+        import glob
+        # 查找所有 checkpoint 子目录
+        step_dirs = glob.glob(os.path.join(ckp_dir, "checkpoint-*"))
+        if step_dirs:
+            # 找到最大的 step
+            max_step = 0
+            for d in step_dirs:
+                try:
+                    step_num = int(os.path.basename(d).split("-")[-1])
+                    if step_num > max_step:
+                        max_step = step_num
+                        resume_ckp_path = d
+                except:
+                    pass
+            if resume_ckp_path:
+                resume_step = max_step
+                Logger(f'[SFT] Resume from checkpoint: {resume_ckp_path} (step {resume_step})')
+                # 更新 wandb run name
+                if args.use_wandb:
+                    wandb_run_name = f"QwenVL-Tutor-SFT-E{args.epochs}-B{args.batch_size}-LR{args.learning_rate}-resume{resume_step}"
+                # 直接用 checkpoint 路径作为 model_name，后续加载时会用到
+                args.model_name = resume_ckp_path
+        else:
+            Logger(f'[SFT] Resume enabled but no checkpoint found in {ckp_dir}, starting from scratch')
+
+    # 广播 resume_step 到所有进程
+    if dist.is_initialized():
+        resume_step_tensor = torch.tensor(resume_step, dtype=torch.long, device='cuda')
+        dist.broadcast(resume_step_tensor, src=0)
+        resume_step = resume_step_tensor.item()
 
     # ========== 3. 混合精度 ==========
     device_type = "cuda" if "cuda" in args.device else "cpu"
@@ -354,12 +392,26 @@ if __name__ == "__main__":
         )
 
     # ========== 8. 开始训练 ==========
+    # 计算每个 epoch 的 batch 数量，用于断点续训练的全局 step 定位
+    batches_per_epoch = len(train_ds) // args.batch_size
+    global_resume_step = resume_step  # 累积的全局 step（跨 epoch）
+
     for epoch in range(args.epochs):
         if train_sampler:
             train_sampler.set_epoch(epoch)
         setup_seed(42 + epoch)
         indices = torch.randperm(len(train_ds)).tolist()
-        batch_sampler = SkipBatchSampler(train_sampler or indices, args.batch_size, 0)
+
+        # 断点续训练：跳过已完成的全 epoch
+        if global_resume_step >= batches_per_epoch:
+            global_resume_step -= batches_per_epoch
+            continue
+
+        # 断点续训练：计算当前 epoch 需要跳过的 batch 数
+        skip_batches = global_resume_step
+        global_resume_step = 0  # 只在第一个 epoch 需要跳过部分 batch
+
+        batch_sampler = SkipBatchSampler(train_sampler or indices, args.batch_size, skip_batches)
         loader = DataLoader(
             train_ds,
             batch_sampler=batch_sampler,
@@ -367,8 +419,8 @@ if __name__ == "__main__":
             pin_memory=True,
             collate_fn=edu_sft_collate_fn,
         )
-        train_epoch(epoch, loader, len(loader), args, model, optimizer, scaler, autocast_ctx,
-                    0, wandb, ds_engine=ds_engine, fsdp_model=fsdp_model)
+        train_epoch(epoch, loader, batches_per_epoch, args, model, optimizer, scaler, autocast_ctx,
+                    skip_batches, wandb, ds_engine=ds_engine, fsdp_model=fsdp_model)
 
     # ========== 9. 最终保存 ==========
     if is_main_process():
