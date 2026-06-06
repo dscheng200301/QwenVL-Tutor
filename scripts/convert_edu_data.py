@@ -1,4 +1,4 @@
-﻿"""
+"""
 教育数据集格式转换工具
 将多个开源教育数据集统一转换为 QwenVL-Tutor 的 Parquet 格式
 
@@ -1122,7 +1122,8 @@ def convert_we_math(output_path, max_samples=None):
     from datasets import load_dataset
     print("下载 We-Math 2.0 数据集...")
     try:
-        ds = load_dataset("We-Math/We-Math2.0-Standard", split="train", streaming=True)
+        # We-Math 2.0 只有 standard split，没有 train split
+        ds = load_dataset("We-Math/We-Math2.0-Standard", split="standard", streaming=True)
     except Exception as e:
         print(f"We-Math 2.0 加载失败: {e}")
         return
@@ -1163,7 +1164,8 @@ def convert_geo170k(output_path, max_samples=None):
     from datasets import load_dataset
     print("下载 Geo170K 数据集...")
     try:
-        ds = load_dataset("Luckyjhg/Geo170K", split="train", streaming=True)
+        # Geo170K 没有 train split，使用 qa_tuning split（包含问答数据）
+        ds = load_dataset("Luckyjhg/Geo170K", split="qa_tuning", streaming=True)
     except Exception as e:
         print(f"Geo170K 加载失败: {e}")
         return
