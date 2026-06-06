@@ -1,4 +1,4 @@
-﻿# QwenVL-Tutor 详细文档
+# QwenVL-Tutor 详细文档
 
 > 本文档为 [README.md](README.md) 的补充，包含项目架构设计、技术细节和高级用法。快速上手请先阅读 [README.md](README.md)。
 
@@ -53,11 +53,14 @@
 ## 训练管线（SFT → GRPO 两阶段）
 
 ```
-SFT 训练 (22 datasets, ~222K, weighted sampling)
-    → 一站式评估 (edu_evaluate.py all)  → 自动生成 report.md
-    → 一站式优化 (edu_optimize.py auto) → resample + retrain
+基模评估 (edu_evaluate.py run --stage baseline) → 建立基线
+    → SFT 训练 (22 datasets, ~222K, weighted sampling)
+    → SFT 评估 (edu_evaluate.py all)  → 自动生成 report.md
+    → SFT 优化 (edu_optimize.py auto) → resample + retrain
     → GRPO 训练 (5K curated, 5 维度奖励)  → 从 SFT 衔接
-    → 一站式最终评估 → 19 datasets + ScienceQA test split
+    → GRPO 评估 (edu_evaluate.py all --stage grpo)
+    → GRPO 优化 (edu_optimize.py grpo) → 自动决策：调整超参 / 回退 SFT
+    → 最终评估 → 19 datasets + ScienceQA test split
 ```
 
 **为什么去掉 DPO？** 当前 DPO 偏好数据用「简单截断」构造，本质是长度偏好而非质量偏好，训练风险大于收益。GRPO 的奖励模型已能直接优化「引导性」维度。

@@ -1,11 +1,11 @@
-﻿# QwenVL-Tutor — 亲子教育 VLM
+# QwenVL-Tutor — 亲子教育 VLM
 
 基于 Qwen2-VL 的拍照做题 VLM，专为亲子教育场景设计。拍题即答，分步引导，亲子共学。
 
 ## 核心流程
 
 ```
-下载模型 → 下载+转换数据 → 分离训练/评估集 → SFT 训练 → 评估 → 优化 → GRPO 训练 → 最终评估
+下载模型 → 下载+转换数据 → 分离训练/评估集 → 基模评估 → SFT训练 → SFT评估 → SFT优化 → GRPO训练 → GRPO评估 → GRPO优化 → 最终评估
 ```
 
 ## 快速开始
@@ -45,22 +45,31 @@ python scripts/convert_edu_data.py --dataset scienceqa --output dataset/edu_scie
 > - 训练集：`dataset/edu_*.parquet`（22 个文件）
 > - 评估集：`dataset/eval/eval_*.parquet`（19 个文件）
 
-### 4. 训练 + 评估 + 优化（一站式 5 步）
+### 4. 基模评估 + 训练 + 优化（一站式 8 步）
 
 ```bash
-# ① SFT 训练（多卡自动 DDP）
+# ① 基模评估（训练前基线，退化检测依赖此步）
+python scripts/eval/edu_evaluate.py run --stage baseline --eval_all --max_samples 200
+
+# ② SFT 训练（多卡自动 DDP）
 python trainer/train_sft.py --epochs 3 --save_weight edu_sft
 
-# ② SFT 评估（自动 vLLM 加速）
+# ③ SFT 评估（自动 vLLM 加速）
 python scripts/eval/edu_evaluate.py all --stage sft --model_path out/edu_sft --eval_all
 
-# ③ 优化（自动 DeepSpeed）
+# ④ SFT 优化（基于评估结果自动 resample + retrain）
 python scripts/optimize/edu_optimize.py auto --epochs 2 --save_weight edu_sft_v2
 
-# ④ GRPO 训练（LLM-as-Judge 奖励）
+# ⑤ GRPO 训练（LLM-as-Judge 奖励）
 python trainer/train_grpo.py --from_weight ../out/edu_sft --epochs 1 --api_model gpt-4o-mini
 
-# ⑤ 最终评估
+# ⑥ GRPO 评估
+python scripts/eval/edu_evaluate.py all --stage grpo --model_path out/edu_grpo --eval_all
+
+# ⑦ GRPO 优化（基于评估结果自动决策：调整超参 / 回退 SFT 优化）
+python scripts/optimize/edu_optimize.py grpo --eval_file eval_results/grpo_xxx.json
+
+# ⑧ 最终评估
 python scripts/eval/edu_evaluate.py all --stage full --model_path out/edu_grpo --eval_all
 ```
 
